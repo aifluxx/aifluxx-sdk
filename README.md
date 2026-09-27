@@ -4,6 +4,8 @@ Python client for **Truest** (and Enterprise after port). Same credentials as Co
 
 Specs: [DEV-162](../dubai-agents/specs/DEV-162-truest-a2a-sdk/spec.md) (A2A + this package) · [DEV-165](../dubai-agents/specs/DEV-165-mailbox-agent-send/spec.md) (send from a connected mailbox) · [DEV-166](../dubai-agents/specs/DEV-166-agent-marketplace/spec.md) (partner marketplace).
 
+This repo is the installable client and the `truest` CLI. The developer site (`frontend-developer/`, docs, signup, sandbox, Marketplace) stays in `dubai-agents`. The CLI is one binary for every IDE; it does not ship a UI and it does not special-case Cursor or Antigravity.
+
 ## How it works
 
 Three ways to talk to the product. They all act **as the user who owns the key**.
@@ -47,6 +49,22 @@ aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git@<sha>
 ```
 
 CI (pytest + package build) runs on every `main` push and pull request. Push a `v*` tag to cut a GitHub Release.
+
+## CLI
+
+Same commands from any IDE terminal. Signup stays on the developer site. `git push` stays on the developer’s GitHub or GitLab repo.
+
+```text
+pip install -e C:\1_Local\Apps\aifluxx-sdk
+truest login --api-key afx_dev_… --url https://api.truest.biz
+truest init my-agent --template compliance
+truest validate
+truest push
+truest run "Summarise open compliance tasks"
+truest submit
+```
+
+`truest push` uploads the folder. `truest import-git <url>` creates Drafts from a repo the developer already pushed. Credentials: `~/.truest/credentials`. Per-package lock: `.truest/agent.lock`. Until the host mounts `/api/dev`, push / run / submit / status / import-git raise `HostUnavailable`.
 
 ## Mail
 

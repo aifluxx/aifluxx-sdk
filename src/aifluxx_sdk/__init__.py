@@ -6,6 +6,7 @@ from aifluxx_sdk.exceptions import (
     AuthError,
     BusinessRequired,
     Forbidden,
+    HostUnavailable,
     MailboxNotConnected,
     SendFailed,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "AuthError",
     "BusinessRequired",
     "Forbidden",
+    "HostUnavailable",
     "MailboxNotConnected",
     "SendFailed",
 ]

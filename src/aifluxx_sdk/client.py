@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import httpx
 
+from aifluxx_sdk.dev import DevClient
 from aifluxx_sdk.exceptions import AuthError
 from aifluxx_sdk.mail import MailClient
 
@@ -24,6 +25,7 @@ class TruestClient:
             timeout=timeout,
         )
         self.mail = MailClient(self._http, self.url)
+        self.dev = DevClient(self._http, self.url)
 
     def close(self) -> None:
         self._http.close()

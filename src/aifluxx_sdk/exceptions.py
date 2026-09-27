@@ -25,3 +25,7 @@ class MailboxNotConnected(AifluxxError):
 
 class SendFailed(AifluxxError):
     """Provider (SMTP / Gmail / Graph) rejected the send."""
+
+
+class HostUnavailable(AifluxxError):
+    """Developer API is not mounted on this host yet."""
