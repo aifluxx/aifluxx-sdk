@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aifluxx-sdk"
 version = "0.1.0"
-description = "Python client and truest CLI for Truest (mail send, agent packages)."
+description = "Python client and aifluxx CLI for agent packages."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
+aifluxx = "aifluxx_sdk.cli:main"
 truest = "aifluxx_sdk.cli:main"
 
 [project.optional-dependencies]

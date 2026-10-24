@@ -1,6 +1,7 @@
-"""`truest` CLI. Same commands from any IDE terminal."""
+"""`aifluxx` CLI. Same commands from any IDE terminal. `truest` still runs this program."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import typer
@@ -12,11 +13,18 @@ from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.package import validate_package
 from aifluxx_sdk.templates import TEMPLATES, get_template, render_spec, slug_to_name
 
+def _prog() -> str:
+    stem = Path(sys.argv[0]).name.split(".")[0].lower()
+    return stem if stem in {"aifluxx", "truest"} else "aifluxx"
+
+
+PROG = _prog()
+
 app = typer.Typer(
-    name="truest",
+    name=PROG,
     no_args_is_help=True,
     add_completion=False,
-    help="Author a Truest agent package from any IDE. Signup stays on the developer site.",
+    help="Author an agent package from any IDE. Signup stays on the developer site.",
 )
 
 
@@ -73,7 +81,7 @@ def init_cmd(
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(slug)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
-    typer.echo(f"Created {root}. Commit this folder to your Git repo, then `truest push` or Import from Git.")
+    typer.echo(f"Created {root}. Commit this folder to your Git repo, then `{PROG} push` or Import from Git.")
 
 
 @app.command()
