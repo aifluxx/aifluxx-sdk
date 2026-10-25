@@ -5,9 +5,16 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+_DIR = ".aifluxx"
+_LEGACY_DIR = ".truest"
+
 
 def lock_path(package_dir: Path) -> Path:
-    return package_dir / ".truest" / "agent.lock"
+    return package_dir / _DIR / "agent.lock"
+
+
+def _legacy_lock_path(package_dir: Path) -> Path:
+    return package_dir / _LEGACY_DIR / "agent.lock"
 
 
 @dataclass
@@ -19,6 +26,9 @@ class AgentLock:
 
 def load_lock(package_dir: Path) -> AgentLock | None:
     store = lock_path(package_dir)
+    if not store.is_file():
+        legacy = _legacy_lock_path(package_dir)
+        store = legacy if legacy.is_file() else store
     if not store.is_file():
         return None
     data = json.loads(store.read_text(encoding="utf-8"))

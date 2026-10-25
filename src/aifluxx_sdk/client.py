@@ -1,5 +1,7 @@
-"""Truest / Enterprise HTTP client."""
+"""AIfluxx HTTP client."""
 from __future__ import annotations
+
+import warnings
 
 import httpx
 
@@ -8,11 +10,10 @@ from aifluxx_sdk.exceptions import AuthError
 from aifluxx_sdk.mail import MailClient
 
 
-class TruestClient:
+class AifluxxClient:
     """Acts as the Connected-apps key holder.
 
-    Mail send is REST (DEV-165). Skill chat (`send`) is A2A (DEV-162) and
-    raises until the host mounts /a2a.
+    Mail send is REST. Skill chat (`send`) is A2A and raises until the host mounts /a2a.
     """
 
     def __init__(self, url: str, *, api_key: str, timeout: float = 60.0) -> None:
@@ -30,7 +31,7 @@ class TruestClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> TruestClient:
+    def __enter__(self) -> AifluxxClient:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -45,6 +46,17 @@ class TruestClient:
         stream: bool = False,
     ):
         raise NotImplementedError(
-            "client.send() talks A2A at /a2a (DEV-162 phases 1–2). "
-            "Use client.mail.send() for connected-mailbox mail."
+            "client.send() talks A2A at /a2a. Use client.mail.send() for connected-mailbox mail."
         )
+
+
+class TruestClient(AifluxxClient):
+    """Deprecated alias for :class:`AifluxxClient`."""
+
+    def __init__(self, url: str, *, api_key: str, timeout: float = 60.0) -> None:
+        warnings.warn(
+            "TruestClient is deprecated and will be removed. Use AifluxxClient.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(url, api_key=api_key, timeout=timeout)

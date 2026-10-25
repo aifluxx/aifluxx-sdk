@@ -5,12 +5,13 @@ import io
 import tarfile
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import quote
 
 import httpx
 
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
-from aifluxx_sdk.package import validate_package
+from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
 
 
 class DevClient:
@@ -28,7 +29,7 @@ class DevClient:
         report = validate_package(package_dir)
         if not report.ok:
             codes = ", ".join(sorted({row.code for row in report.errors}))
-            raise AifluxxError(f"Package failed validate ({codes}). Run `truest validate`.")
+            raise AifluxxError(f"Package failed validate ({codes}). Run `aifluxx validate`.")
         slug = str(report.spec.get("slug") or package_dir.name)
         version = str(report.spec.get("version") or "0.1.0")
         archive = _tarball(package_dir)
@@ -63,6 +64,22 @@ class DevClient:
             body["ref"] = ref
         return self._json(self._http.post(f"{self._api_root}/api/dev/imports/git", json=body))
 
+    def list_keys(self) -> Any:
+        return self._json(self._http.get(f"{self._api_root}/api/dev/keys"))
+
+    def rotate_key(self, key_id: str) -> Any:
+        return self._json(self._http.post(self._key_path(key_id, "rotate")))
+
+    def revoke_key(self, key_id: str) -> Any:
+        return self._json(self._http.post(self._key_path(key_id, "revoke")))
+
+    def _key_path(self, key_id: str, action: str) -> str:
+        cleaned = (key_id or "").strip()
+        if not cleaned or any(mark in cleaned for mark in ("/", "\\", "?", "#")):
+            raise AifluxxError("key id is invalid.")
+        safe = quote(cleaned, safe="")
+        return f"{self._api_root}/api/dev/keys/{safe}/{action}"
+
     def _json(self, res: httpx.Response) -> Any:
         self._raise(res)
         if not res.content:
@@ -74,13 +91,11 @@ class DevClient:
             return
         detail = _detail(res)
         if res.status_code == 401:
-            raise AuthError(detail or "Key was rejected. Run `truest login` with an afx_dev_ key from Home.")
+            raise AuthError(detail or "Key was rejected. Run `aifluxx login` with an afx_dev_ key from Home.")
         if res.status_code == 403:
             raise Forbidden(detail or "This key cannot see that resource.")
         if res.status_code == 404:
-            raise HostUnavailable(
-                detail or "Developer API is not mounted on this host yet. The CLI is ready; /api/dev ships with DEV-167."
-            )
+            raise HostUnavailable(detail or "That developer API path was not found on this host.")
         raise AifluxxError(detail or f"Request failed ({res.status_code}).")
 
 
@@ -97,7 +112,7 @@ def _tarball(package_dir: Path) -> bytes:
     root = package_dir.resolve()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for path in root.rglob("*"):
-            if not path.is_file() or ".truest" in path.parts:
+            if not path.is_file() or LOCAL_META_DIRS.intersection(path.parts):
                 continue
             tar.add(path, arcname=str(path.relative_to(root)))
     return buf.getvalue()

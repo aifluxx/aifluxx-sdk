@@ -17,6 +17,7 @@ def test_valid_template_package(tmp_path: Path):
     report = validate_package(_write_ok(tmp_path))
     assert report.ok
     assert report.spec["slug"] == "uae-board-pack-assistant"
+    assert report.spec["schema"] == "aifluxx/agent/v1"
 
 
 def test_missing_instructions(tmp_path: Path):
@@ -33,6 +34,15 @@ def test_write_tool_not_allowed(tmp_path: Path):
     (pkg / "spec.yaml").write_text(spec.replace("tools:\n", "tools:\n  - send_mail\n"), encoding="utf-8")
     report = validate_package(pkg)
     assert any(row.code == "write_tool_not_allowed" for row in report.errors)
+
+
+def test_secret_in_local_meta_is_ignored(tmp_path: Path):
+    pkg = _write_ok(tmp_path)
+    meta = pkg / ".aifluxx"
+    meta.mkdir()
+    (meta / "agent.lock").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    report = validate_package(pkg)
+    assert report.ok
 
 
 def test_secret_in_package(tmp_path: Path):

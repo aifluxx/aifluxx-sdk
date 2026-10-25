@@ -10,6 +10,8 @@ import yaml
 
 from aifluxx_sdk.catalog import CATEGORIES, CONNECTORS, READ_TOOLS, SCHEMAS, WRITE_TOOLS
 
+LOCAL_META_DIRS = frozenset({".aifluxx", ".truest"})
+
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
@@ -49,7 +51,7 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 def _scan_secrets(root: Path, report: Report) -> None:
     for path in root.rglob("*"):
-        if not path.is_file() or ".truest" in path.parts or path.suffix in {".png", ".jpg", ".webp"}:
+        if not path.is_file() or LOCAL_META_DIRS.intersection(path.parts) or path.suffix in {".png", ".jpg", ".webp"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")

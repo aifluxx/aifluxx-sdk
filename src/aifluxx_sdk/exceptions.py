@@ -28,4 +28,4 @@ class SendFailed(AifluxxError):
 
 
 class HostUnavailable(AifluxxError):
-    """Developer API is not mounted on this host yet."""
+    """The host returned 404 for a developer API path."""

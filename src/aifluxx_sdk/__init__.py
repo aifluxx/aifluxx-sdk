@@ -1,6 +1,8 @@
-"""Python client for Truest (mail send now; A2A skills when the server is up)."""
+"""Python client for AIfluxx (mail send now; A2A skills when the server is up)."""
 
-from aifluxx_sdk.client import TruestClient
+from importlib.metadata import PackageNotFoundError, version
+
+from aifluxx_sdk.client import AifluxxClient, TruestClient
 from aifluxx_sdk.exceptions import (
     AifluxxError,
     AuthError,
@@ -11,7 +13,13 @@ from aifluxx_sdk.exceptions import (
     SendFailed,
 )
 
+try:
+    __version__ = version("aifluxx-sdk")
+except PackageNotFoundError:
+    __version__ = "0.1.0"
+
 __all__ = [
+    "AifluxxClient",
     "TruestClient",
     "AifluxxError",
     "AuthError",
@@ -20,4 +28,5 @@ __all__ = [
     "HostUnavailable",
     "MailboxNotConnected",
     "SendFailed",
+    "__version__",
 ]
