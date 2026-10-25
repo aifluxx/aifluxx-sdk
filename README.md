@@ -1,79 +1,126 @@
 # aifluxx-sdk
 
-Python client for **Truest** (and Enterprise after port). Same credentials as Connected apps (`afx_live_…` or `mcpat_…`). Tag-pinned like `aifluxx-connectors`. Not on PyPI in v0.1.
+Python client and `aifluxx` command-line tool for [AIfluxx](https://aifluxx.co.za). The CLI authors an agent package from any IDE terminal. The library calls the developer API and connected-mailbox send as the person who owns the key.
 
-Specs: [DEV-162](../dubai-agents/specs/DEV-162-truest-a2a-sdk/spec.md) (A2A + this package) · [DEV-165](../dubai-agents/specs/DEV-165-mailbox-agent-send/spec.md) (send from a connected mailbox) · [DEV-166](../dubai-agents/specs/DEV-166-agent-marketplace/spec.md) (partner marketplace).
+Signup, docs, and the developer site stay on the AIfluxx host. This repository does not ship a UI.
 
-This repo is the installable client and the `truest` CLI. The developer site (`frontend-developer/`, docs, signup, sandbox, Marketplace) stays in `dubai-agents`. The CLI is one binary for every IDE; it does not ship a UI and it does not special-case Cursor or Antigravity.
+## Install
 
-## How it works
+This package is not on PyPI, and the GitHub repository is private. These commands fail today:
 
-Three ways to talk to the product. They all act **as the user who owns the key**.
-
-| Surface | Who uses it | Protocol |
-|---|---|---|
-| **Chat** | A person in Chief of Staff | In-app. The agent calls the send **tool**. |
-| **MCP** | Cursor, Claude, ChatGPT | DEV-158 `/mcp`. Apps, not other agents. |
-| **SDK / A2A** | Other agents and Python scripts | This package. Mail send is REST in v0.1. Chat-to-a-skill (`client.send("chief_of_staff", …)`) is A2A (`/a2a`) when DEV-162 phases 1–2 are up. |
-
-Mailbox send (DEV-165) is one host function. Chat, MCP, and the SDK all call it. Rules are the same everywhere:
-
-- Key must be a **company admin or delegate**.
-- **`from` is required** and must match a connected mailbox (`imap_mail`, `gmail_mail`, `ms_graph_mail`).
-- Send is **immediate**. No draft step.
-- Invites and password reset do **not** use this path (platform Gmail).
-
-```
-Your script / remote agent
-        │  aifluxx-sdk  (Bearer afx_live_…)
-        ▼
-Truest API  POST /api/companies/{id}/mail/send
-        │  resolve From → connector instance
-        ▼
-IMAP SMTP  or  Gmail API  or  Microsoft Graph
-        │
-        ▼
-pinnacle@palmerclan.us (or whichever From you named)
+```bash
+pip install aifluxx
+pip install aifluxx-sdk
+pip install git+https://github.com/aifluxx/aifluxx-sdk.git
 ```
 
-## Install (local)
+`pip install aifluxx` looks up a different name and finds nothing. `pip install aifluxx-sdk` looks on PyPI, where this project has not been published. An unauthenticated `git+https` URL gets a 404 from GitHub because the repository is private.
 
-```text
-pip install -e C:\1_Local\Apps\aifluxx-sdk
+Install from a checkout you can already read:
+
+```bash
+gh repo clone aifluxx/aifluxx-sdk
+cd aifluxx-sdk
+pip install -e .
 ```
 
-Git pin, same pattern as connectors (private repo; do not float on `main`):
+If your SSH key can read `aifluxx/aifluxx-sdk`:
 
-```text
-aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git@<sha>
+```bash
+pip install "aifluxx-sdk @ git+ssh://git@github.com/aifluxx/aifluxx-sdk.git"
 ```
 
-CI (pytest + package build) runs on every `main` push and pull request. Push a `v*` tag to cut a GitHub Release.
+Publishing to PyPI, and making the repository public, are separate decisions. Neither is required to install from a clone. See `.github/workflows/publish.yml`.
 
-## CLI
+## Log in
 
-Same commands from any IDE terminal. Signup stays on the developer site. `git push` stays on the developer’s GitHub or GitLab repo.
+The default API root is `https://api.aifluxx.co.za`.
 
-```text
-pip install -e C:\1_Local\Apps\aifluxx-sdk
-truest login --api-key afx_dev_… --url https://api.truest.biz
-truest init my-agent --template compliance
-truest validate
-truest push
-truest run "Summarise open compliance tasks"
-truest submit
+```bash
+aifluxx login --api-key afx_dev_…
 ```
 
-`truest push` uploads the folder. `truest import-git <url>` creates Drafts from a repo the developer already pushed. Credentials: `~/.truest/credentials`. Per-package lock: `.truest/agent.lock`. Until the host mounts `/api/dev`, push / run / submit / status / import-git raise `HostUnavailable`.
+Override the host for this login with `--url`, or for every command in the current process with `AIFLUXX_API_URL`:
 
-## Mail
+```bash
+aifluxx login --url https://api.aifluxx.co.za
+export AIFLUXX_API_URL=https://api.aifluxx.co.za
+```
+
+`--url` wins over `--platform`, which wins over `AIFLUXX_API_URL`. When `AIFLUXX_API_URL` is set, later commands use it instead of the URL saved at login.
+
+Truest is a named profile. It always uses `https://api.truest.ae`:
+
+```bash
+aifluxx login --platform truest
+```
+
+`https://api.truest.biz` is retired. The CLI rewrites it to `https://api.aifluxx.co.za`. It is not a profile and it is not the default. `--platform truest` is what selects `https://api.truest.ae`.
+
+Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. If `~/.aifluxx/credentials` is missing and `~/.truest/credentials` exists, the CLI moves that file into `~/.aifluxx/`, rewrites a retired host, and deletes `~/.truest/credentials`. The override for the path is `AIFLUXX_CREDENTIALS`. `TRUEST_CREDENTIALS` still works and prints a deprecation warning. The file stays on your machine. Do not commit it.
+
+`truest` still runs this program and prints a deprecation warning. Use `aifluxx`.
+
+## Author a package
+
+```bash
+aifluxx init my-agent --template compliance
+aifluxx validate
+aifluxx push
+aifluxx run "Summarise open compliance tasks"
+aifluxx run my-agent "Summarise open compliance tasks"
+aifluxx submit
+```
+
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. New packages use schema `aifluxx/agent/v1`. `truest/agent/v1` still validates. `validate` is offline. `push` uploads the folder and creates a Draft. It does not `git push`.
+
+`aifluxx push` sends one request:
+
+| | |
+|---|---|
+| Method and path | `POST /api/dev/agents/{slug}/versions` |
+| Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` and `.truest` are left out. |
+| Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
+
+The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
+
+`run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API.
+
+`submit` and `run` call `/api/dev/agents/{slug}/versions/{version_id}/...`. `version_id` is a UUID. The CLI does not send the word `latest` or a semver such as `0.1.0` in that path. It uses the UUID saved at push, or looks the slug up with `GET /api/dev/agents`. Pass `--version <uuid>` to choose one yourself. A semver passed to `--version` is looked up, not sent as the path id.
+
+Other commands:
+
+```bash
+aifluxx status
+aifluxx import-git https://github.com/your-org/your-agent
+aifluxx keys list
+aifluxx keys rotate <key-id>
+aifluxx keys revoke <key-id>
+```
+
+After a successful push the CLI writes `.aifluxx/agent.lock` in the package, including the version UUID. An older `.truest/agent.lock` is copied to `.aifluxx/agent.lock` the next time it is read. Neither directory is uploaded. New commands do not write `~/.truest` or `.truest/agent.lock`.
+
+## API keys
+
+`aifluxx keys` calls the developer key API:
+
+| Command | Request |
+|---|---|
+| `aifluxx keys list` | `GET /api/dev/keys` |
+| `aifluxx keys rotate <id>` | `POST /api/dev/keys/{id}/rotate` |
+| `aifluxx keys revoke <id>` | `POST /api/dev/keys/{id}/revoke` |
+
+List responses omit the secret. Rotate prints a new secret once. `--save` on rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
+
+## Python
 
 ```python
-from aifluxx_sdk import TruestClient, AuthError, Forbidden, MailboxNotConnected
+from aifluxx_sdk import AifluxxClient
 
-client = TruestClient("https://api.aifluxx.com", api_key="afx_live_…")
+client = AifluxxClient("https://api.aifluxx.co.za", api_key="afx_live_…")
 client.mail.send(
-    from_="pinnacle@palmerclan.us",
+    from_="owner@example.com",
     to="colleague@example.com",
     subject="Q4 stock",
     body="Please find the note below.",
@@ -81,28 +128,48 @@ client.mail.send(
 )
 ```
 
-`client.mail.mailboxes(business_id=…)` lists connected identities you may name as `from_`.
+`TruestClient` still constructs the same client and emits a `DeprecationWarning`. Use `AifluxxClient`.
 
-## Chat skills (A2A — after DEV-162 server)
+`client.mail.mailboxes(business_id=…)` lists connected identities you may name as `from_`. `from_` is required and must match a connected mailbox (`imap_mail`, `gmail_mail`, or `ms_graph_mail`). Send is immediate. The key must be a company admin or delegate. Multi-business users pass `business_id`.
 
-```python
-for ev in client.send("chief_of_staff", "Draft a note to Coert", business_id="…", stream=True):
-    print(ev)
+`client.send(...)` talks to an agent over A2A at `/a2a`. It raises `NotImplementedError` until that route is available. Mail send does not use it.
+
+Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_…` or `mcpat_…`) or a developer key from Home (`afx_dev_…`).
+
+## Errors from the API
+
+`afx_dev_` keys that the host rejects, a failed push, and a redirect are printed with the HTTP status, the method, the URL, and the response body. A 401 is the host rejecting the bearer key (the body may say `Sign in again to create a key.`). A 500 is a host failure on a request that did reach the API, including push. The SDK does not follow redirects. A 307 whose `Location` is `http://...` is reported as a TLS downgrade instead of being followed.
+
+`aifluxx run` reads an error body before it raises. A streamed 4xx or 5xx is shown as that host message, not as `httpx.ResponseNotRead`.
+
+## MCP
+
+MCP clients talk to the host. This package does not embed an MCP server. Use the HTTPS URL with a trailing slash:
+
+```json
+{
+  "mcpServers": {
+    "aifluxx": {
+      "url": "https://api.aifluxx.co.za/mcp/",
+      "headers": {
+        "Authorization": "Bearer afx_live_…"
+      }
+    }
+  }
+}
 ```
 
-Until `/a2a` is mounted, `send()` raises `NotImplementedError`. Mail does not wait on A2A.
+`https://api.aifluxx.co.za/mcp` (no slash) currently returns 307 to `http://api.aifluxx.co.za/mcp/`, which drops TLS. That redirect is a host bug. The trailing-slash HTTPS URL avoids it. For the Truest profile use `https://api.truest.ae/mcp/`. Multi-business keys pass `business_id` the same way the Python client does.
 
-## Partners — listing your agent on the Marketplace (DEV-166)
+## Develop
 
-You host your agent. AIfluxx calls it over A2A and pays you a share of usage.
+```bash
+pip install -e ".[dev]"
+pytest
+python -m build
+twine check dist/*
+```
 
-1. Build an A2A agent (any language; `a2a-sdk` for Python). Publish `/.well-known/agent-card.json`. A `serve_agent(card, handler)` helper lands in this package with DEV-166.
-2. Sign up as a partner, finish **Stripe Connect Express** onboarding.
-3. Create a **Listing**: card URL, name, description, price per task (or free). Submit. A platform admin approves.
-4. Subscribers **Hire** you from Marketplace. Each task they run is metered. AIfluxx bills them; you get your share (default 80%) by monthly Connect payout.
+Requires Python 3.11 or newer.
 
-You receive the prompt and whatever the subscriber passes. You never get their connector documents or company data by default.
-
-## Auth
-
-`Authorization: Bearer` with a Connected-apps key. Multi-business users must pass `business_id` (same as MCP). Wrong company or non-admin → `Forbidden`. Named From not connected → `MailboxNotConnected`.
+Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI.

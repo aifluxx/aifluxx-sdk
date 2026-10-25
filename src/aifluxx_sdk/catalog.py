@@ -10,7 +10,7 @@ READ_TOOLS = frozenset(
         "get_compliance_status",
         "search_documents",
         "get_document",
-        "ask_truest",
+        "ask_truest",  # host tool id; still the name the API allow-list publishes
         "list_mandate_tasks",
         "list_contacts",
         "list_businesses",

@@ -5,9 +5,16 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+_DIR = ".aifluxx"
+_LEGACY_DIR = ".truest"
+
 
 def lock_path(package_dir: Path) -> Path:
-    return package_dir / ".truest" / "agent.lock"
+    return package_dir / _DIR / "agent.lock"
+
+
+def _legacy_lock_path(package_dir: Path) -> Path:
+    return package_dir / _LEGACY_DIR / "agent.lock"
 
 
 @dataclass
@@ -15,10 +22,15 @@ class AgentLock:
     id: str | None = None
     slug: str | None = None
     last_pushed_version: str | None = None
+    version_id: str | None = None
 
 
 def load_lock(package_dir: Path) -> AgentLock | None:
     store = lock_path(package_dir)
+    legacy = _legacy_lock_path(package_dir)
+    if not store.is_file() and legacy.is_file():
+        store.parent.mkdir(parents=True, exist_ok=True)
+        store.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
     if not store.is_file():
         return None
     data = json.loads(store.read_text(encoding="utf-8"))
@@ -26,6 +38,7 @@ def load_lock(package_dir: Path) -> AgentLock | None:
         id=data.get("id"),
         slug=data.get("slug"),
         last_pushed_version=data.get("last_pushed_version"),
+        version_id=data.get("version_id"),
     )
 
 
@@ -38,6 +51,7 @@ def save_lock(package_dir: Path, lock: AgentLock) -> Path:
                 "id": lock.id,
                 "slug": lock.slug,
                 "last_pushed_version": lock.last_pushed_version,
+                "version_id": lock.version_id,
             },
             indent=2,
         )

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aifluxx_sdk import MailboxNotConnected, TruestClient
+from aifluxx_sdk import AifluxxClient, MailboxNotConnected, TruestClient
 from aifluxx_sdk.mail import MailClient
 
 
@@ -42,7 +42,14 @@ def test_send_posts_json():
 
 
 def test_client_send_not_implemented_until_a2a():
-    client = TruestClient("https://api.example", api_key="afx_live_test")
+    client = AifluxxClient("https://api.example", api_key="afx_live_test")
     with pytest.raises(NotImplementedError, match="A2A"):
         client.send("chief_of_staff", "hello", business_id="co")
+    client.close()
+
+
+def test_truest_client_is_deprecated_alias():
+    with pytest.warns(DeprecationWarning, match="AifluxxClient"):
+        client = TruestClient("https://api.example", api_key="afx_live_test")
+    assert isinstance(client, AifluxxClient)
     client.close()

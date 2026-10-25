@@ -1,39 +1,47 @@
-"""`aifluxx` CLI. Same commands from any IDE terminal. `truest` still runs this program."""
+"""`aifluxx` CLI. `truest` is a deprecated console-script alias."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+from typing import NoReturn
 
+import httpx
 import typer
 
-from aifluxx_sdk.client import TruestClient
-from aifluxx_sdk.credentials import DEFAULT_URL, Credentials, load_credentials, save_credentials
+from aifluxx_sdk.client import AifluxxClient
+from aifluxx_sdk.credentials import Credentials, load_credentials, normalize_api_url, resolve_api_url, save_credentials
 from aifluxx_sdk.exceptions import AifluxxError, AuthError
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.package import validate_package
 from aifluxx_sdk.templates import TEMPLATES, get_template, render_spec, slug_to_name
+
+_SECRET_FIELDS = ("api_key", "key", "secret", "token")
+
 
 def _prog() -> str:
     stem = Path(sys.argv[0]).name.split(".")[0].lower()
     return stem if stem in {"aifluxx", "truest"} else "aifluxx"
 
 
-PROG = _prog()
-
 app = typer.Typer(
-    name=PROG,
+    name=_prog(),
     no_args_is_help=True,
     add_completion=False,
-    help="Author an agent package from any IDE. Signup stays on the developer site.",
+    help="Author an agent package and call the AIfluxx API. Signup stays on the developer site.",
 )
+keys_app = typer.Typer(no_args_is_help=True, help="List, rotate, or revoke developer API keys.")
+app.add_typer(keys_app, name="keys")
 
 
-def _client() -> TruestClient:
+def _client() -> AifluxxClient:
     creds = load_credentials()
-    return TruestClient(creds.url, api_key=creds.api_key)
+    override = os.environ.get("AIFLUXX_API_URL", "").strip()
+    url = normalize_api_url(override) if override else creds.url
+    return AifluxxClient(url, api_key=creds.api_key)
 
 
-def _die(exc: Exception) -> None:
+def _die(exc: Exception) -> NoReturn:
     typer.secho(str(exc), err=True, fg="red")
     raise typer.Exit(code=1)
 
@@ -47,10 +55,45 @@ def _package_dir(path: Path | None) -> Path:
     raise AifluxxError("No spec.yaml here. Pass a path or run the command inside the package folder.")
 
 
+def _pretty(payload: object) -> str:
+    import json
+
+    if isinstance(payload, (dict, list)):
+        return json.dumps(payload, indent=2)
+    return str(payload)
+
+
+def _retired_host_in_selection(url: str | None, platform: str | None) -> bool:
+    if url is not None and url.strip():
+        return "api.truest.biz" in url
+    if platform is not None and platform.strip():
+        return False
+    return "api.truest.biz" in os.environ.get("AIFLUXX_API_URL", "")
+
+
+def _new_secret(payload: object) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    for field in _SECRET_FIELDS:
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 @app.command()
 def login(
     api_key: str | None = typer.Option(None, "--api-key", help="afx_dev_ key from Home. Prompted if omitted."),
-    url: str = typer.Option(DEFAULT_URL, "--url", help="Truest API root."),
+    url: str | None = typer.Option(
+        None,
+        "--url",
+        help="API root. Overrides --platform and AIFLUXX_API_URL. Default https://api.aifluxx.co.za.",
+    ),
+    platform: str | None = typer.Option(
+        None,
+        "--platform",
+        help="Named host: aifluxx (https://api.aifluxx.co.za) or truest (https://api.truest.ae).",
+    ),
 ) -> None:
     """Save the afx_dev_ key from Home. Works in any IDE terminal."""
     key = (api_key or typer.prompt("API key from Home", hide_input=True)).strip()
@@ -58,7 +101,16 @@ def login(
         _die(AuthError("api_key is required."))
     if not (key.startswith("afx_dev_") or key.startswith("afx_live_") or key.startswith("mcpat_")):
         typer.secho("Keys from Home start with afx_dev_. Subscriber keys start with afx_live_.", fg="yellow")
-    store = save_credentials(Credentials(url=url, api_key=key))
+    try:
+        resolved = resolve_api_url(url=url, platform=platform)
+    except AifluxxError as exc:
+        _die(exc)
+    if _retired_host_in_selection(url, platform):
+        typer.secho(
+            f"api.truest.biz is retired. Using {resolved}. For the Truest profile, pass --platform truest.",
+            fg="yellow",
+        )
+    store = save_credentials(Credentials(url=resolved, api_key=key))
     typer.echo(f"Saved {store}. This file is on your machine, not in the package repo.")
 
 
@@ -81,7 +133,7 @@ def init_cmd(
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(slug)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
-    typer.echo(f"Created {root}. Commit this folder to your Git repo, then `{PROG} push` or Import from Git.")
+    typer.echo(f"Created {root}. Commit this folder to your Git repo, then `aifluxx push` or Import from Git.")
 
 
 @app.command()
@@ -108,44 +160,86 @@ def push(path: Path | None = typer.Argument(None, help="Package folder. Defaults
         package = _package_dir(path)
         with _client() as client:
             payload = client.dev.push(package)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(payload if isinstance(payload, str) else _pretty(payload))
 
 
-@app.command("run")
-def run_cmd(
-    prompt: str = typer.Argument(..., help="Prompt to run against the sandbox."),
-    path: Path | None = typer.Option(None, "--path", help="Package folder if you are not inside it."),
-    version: str | None = typer.Option(None, "--version"),
-) -> None:
-    """Stream a sandbox run for the package slug."""
-    try:
-        package = _package_dir(path)
+def _package_for_slug(path: Path | None, slug: str | None) -> Path | None:
+    if path is not None:
+        return _package_dir(path)
+    cwd = Path.cwd()
+    if not (cwd / "spec.yaml").is_file():
+        return None
+    if slug is None:
+        return cwd
+    report = validate_package(cwd)
+    spec_slug = str(report.spec.get("slug") or cwd.name)
+    return cwd if spec_slug == slug else None
+
+
+def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tuple[str, str, Path | None]:
+    if len(parts) == 1:
+        prompt = parts[0]
+        slug = slug_opt
+    elif len(parts) == 2:
+        slug, prompt = parts
+        if slug_opt and slug_opt != slug:
+            raise AifluxxError("Pass the slug once, either as the first argument or as --slug.")
+    else:
+        raise AifluxxError("Usage: aifluxx run PROMPT    or    aifluxx run SLUG PROMPT")
+    package = _package_for_slug(path, slug)
+    if not slug:
+        if package is None:
+            raise AifluxxError(
+                "Pass the package slug: aifluxx run SLUG PROMPT. "
+                "Inside a package directory, aifluxx run PROMPT reads the slug from spec.yaml."
+            )
         report = validate_package(package)
         slug = str(report.spec.get("slug") or package.name)
-        lock = load_lock(package)
+    return slug, prompt, package
+
+
+@app.command("run")
+def run_cmd(
+    parts: list[str] = typer.Argument(..., metavar="[SLUG] PROMPT", help="Prompt, or slug then prompt."),
+    path: Path | None = typer.Option(None, "--path", help="Package folder when you pass only a prompt."),
+    slug: str | None = typer.Option(None, "--slug", help="Package slug. Use this or the SLUG argument, not both."),
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
+    ),
+) -> None:
+    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt."""
+    try:
+        package_slug, prompt, package = _run_target(parts, slug, path)
+        lock = load_lock(package) if package is not None else None
         with _client() as client:
-            for line in client.dev.run(slug, prompt, version=version or (lock.last_pushed_version if lock else None)):
+            for line in client.dev.run(package_slug, prompt, version=version, lock=lock):
                 typer.echo(line)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
 
 
 @app.command()
 def submit(
     path: Path | None = typer.Argument(None, help="Package folder. Defaults to the current directory."),
-    version: str | None = typer.Option(None, "--version"),
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
+    ),
 ) -> None:
-    """Submit the latest Draft for review."""
+    """Submit a draft for review. The version path is a UUID, looked up when you do not pass one."""
     try:
         package = _package_dir(path)
         report = validate_package(package)
         slug = str(report.spec.get("slug") or package.name)
         lock = load_lock(package)
         with _client() as client:
-            payload = client.dev.submit(slug, version or (lock.last_pushed_version if lock else None))
-    except (AifluxxError, OSError) as exc:
+            payload = client.dev.submit(slug, version, lock=lock)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -156,7 +250,7 @@ def status() -> None:
     try:
         with _client() as client:
             payload = client.dev.status()
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -171,20 +265,76 @@ def import_git(
     try:
         with _client() as client:
             payload = client.dev.import_git(repo_url, token=token, ref=ref)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
 
-def _pretty(payload: object) -> str:
-    import json
+@keys_app.command("list")
+def keys_list() -> None:
+    """Show developer API keys for the logged-in account. Secrets are not returned."""
+    try:
+        with _client() as client:
+            payload = client.dev.list_keys()
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    typer.echo(_pretty(payload))
 
-    if isinstance(payload, (dict, list)):
-        return json.dumps(payload, indent=2)
-    return str(payload)
+
+@keys_app.command("rotate")
+def keys_rotate(
+    key_id: str = typer.Argument(..., help="Key id from `aifluxx keys list`."),
+    save: bool = typer.Option(False, "--save", help="Write the new secret into the local credentials file."),
+) -> None:
+    """Rotate one key. The new secret is shown once."""
+    try:
+        with _client() as client:
+            payload = client.dev.rotate_key(key_id)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    secret = _new_secret(payload)
+    if isinstance(payload, dict):
+        shown = {key: value for key, value in payload.items() if key not in _SECRET_FIELDS}
+        typer.echo(_pretty(shown))
+    else:
+        typer.echo(_pretty(payload))
+    if not secret:
+        return
+    typer.secho("New key (shown once):", fg="yellow")
+    typer.echo(secret)
+    if not save:
+        return
+    try:
+        current = load_credentials()
+        store = save_credentials(Credentials(url=current.url, api_key=secret))
+    except (AifluxxError, OSError) as exc:
+        _die(exc)
+    typer.echo(f"Updated {store}.")
+
+
+@keys_app.command("revoke")
+def keys_revoke(
+    key_id: str = typer.Argument(..., help="Key id from `aifluxx keys list`."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Revoke without a confirmation prompt."),
+) -> None:
+    """Revoke one key. It stops working immediately."""
+    if not yes and not typer.confirm(f"Revoke key {key_id}?"):
+        raise typer.Exit(code=1)
+    try:
+        with _client() as client:
+            payload = client.dev.revoke_key(key_id)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    typer.echo(_pretty(payload))
 
 
 def main() -> None:
+    if _prog() == "truest":
+        typer.secho(
+            "The truest command is deprecated and will be removed. Use aifluxx.",
+            err=True,
+            fg="yellow",
+        )
     app()
 
 

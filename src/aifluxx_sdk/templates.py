@@ -1,4 +1,4 @@
-"""Starter packages for `truest init --template`."""
+"""Starter packages for `aifluxx init --template`."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -102,7 +102,7 @@ def render_spec(slug: str, template: Template) -> str:
         connectors = ", ".join(template.knowledge)
         knowledge = f"knowledge:\n  connectors: [{connectors}]\n  folders: []\n"
     return (
-        "schema: truest/agent/v1\n"
+        "schema: aifluxx/agent/v1\n"
         f"slug: {slug}\n"
         f"name: {slug_to_name(slug)}\n"
         f"description: >\n  {template.description}\n"

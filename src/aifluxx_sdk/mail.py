@@ -47,6 +47,18 @@ class MailClient:
 
 
 def _raise_mail(res: httpx.Response) -> None:
+    if 300 <= res.status_code < 400:
+        location = ""
+        headers = getattr(res, "headers", {}) or {}
+        try:
+            location = str(headers.get("location") or headers.get("Location") or "")
+        except Exception:
+            location = ""
+        target = location or "(no Location header)"
+        note = " The Location URL is http, so the host is downgrading TLS." if location.startswith("http://") else ""
+        raise SendFailed(
+            f"HTTP {res.status_code} redirect to {target}.{note} The client does not follow redirects."
+        )
     if res.status_code < 400:
         return
     detail = ""
