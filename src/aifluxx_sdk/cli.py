@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+import httpx
 import typer
 
 from aifluxx_sdk.client import AifluxxClient
@@ -105,7 +106,10 @@ def login(
     except AifluxxError as exc:
         _die(exc)
     if _retired_host_in_selection(url, platform):
-        typer.secho(f"api.truest.biz is retired. Using {resolved}.", fg="yellow")
+        typer.secho(
+            f"api.truest.biz is retired. Using {resolved}. For the Truest profile, pass --platform truest.",
+            fg="yellow",
+        )
     store = save_credentials(Credentials(url=resolved, api_key=key))
     typer.echo(f"Saved {store}. This file is on your machine, not in the package repo.")
 
@@ -156,44 +160,86 @@ def push(path: Path | None = typer.Argument(None, help="Package folder. Defaults
         package = _package_dir(path)
         with _client() as client:
             payload = client.dev.push(package)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(payload if isinstance(payload, str) else _pretty(payload))
 
 
-@app.command("run")
-def run_cmd(
-    prompt: str = typer.Argument(..., help="Prompt to run against the sandbox."),
-    path: Path | None = typer.Option(None, "--path", help="Package folder if you are not inside it."),
-    version: str | None = typer.Option(None, "--version"),
-) -> None:
-    """Stream a sandbox run for the package slug."""
-    try:
-        package = _package_dir(path)
+def _package_for_slug(path: Path | None, slug: str | None) -> Path | None:
+    if path is not None:
+        return _package_dir(path)
+    cwd = Path.cwd()
+    if not (cwd / "spec.yaml").is_file():
+        return None
+    if slug is None:
+        return cwd
+    report = validate_package(cwd)
+    spec_slug = str(report.spec.get("slug") or cwd.name)
+    return cwd if spec_slug == slug else None
+
+
+def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tuple[str, str, Path | None]:
+    if len(parts) == 1:
+        prompt = parts[0]
+        slug = slug_opt
+    elif len(parts) == 2:
+        slug, prompt = parts
+        if slug_opt and slug_opt != slug:
+            raise AifluxxError("Pass the slug once, either as the first argument or as --slug.")
+    else:
+        raise AifluxxError("Usage: aifluxx run PROMPT    or    aifluxx run SLUG PROMPT")
+    package = _package_for_slug(path, slug)
+    if not slug:
+        if package is None:
+            raise AifluxxError(
+                "Pass the package slug: aifluxx run SLUG PROMPT. "
+                "Inside a package directory, aifluxx run PROMPT reads the slug from spec.yaml."
+            )
         report = validate_package(package)
         slug = str(report.spec.get("slug") or package.name)
-        lock = load_lock(package)
+    return slug, prompt, package
+
+
+@app.command("run")
+def run_cmd(
+    parts: list[str] = typer.Argument(..., metavar="[SLUG] PROMPT", help="Prompt, or slug then prompt."),
+    path: Path | None = typer.Option(None, "--path", help="Package folder when you pass only a prompt."),
+    slug: str | None = typer.Option(None, "--slug", help="Package slug. Use this or the SLUG argument, not both."),
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
+    ),
+) -> None:
+    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt."""
+    try:
+        package_slug, prompt, package = _run_target(parts, slug, path)
+        lock = load_lock(package) if package is not None else None
         with _client() as client:
-            for line in client.dev.run(slug, prompt, version=version or (lock.last_pushed_version if lock else None)):
+            for line in client.dev.run(package_slug, prompt, version=version, lock=lock):
                 typer.echo(line)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
 
 
 @app.command()
 def submit(
     path: Path | None = typer.Argument(None, help="Package folder. Defaults to the current directory."),
-    version: str | None = typer.Option(None, "--version"),
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
+    ),
 ) -> None:
-    """Submit the latest Draft for review."""
+    """Submit a draft for review. The version path is a UUID, looked up when you do not pass one."""
     try:
         package = _package_dir(path)
         report = validate_package(package)
         slug = str(report.spec.get("slug") or package.name)
         lock = load_lock(package)
         with _client() as client:
-            payload = client.dev.submit(slug, version or (lock.last_pushed_version if lock else None))
-    except (AifluxxError, OSError) as exc:
+            payload = client.dev.submit(slug, version, lock=lock)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -204,7 +250,7 @@ def status() -> None:
     try:
         with _client() as client:
             payload = client.dev.status()
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -219,7 +265,7 @@ def import_git(
     try:
         with _client() as client:
             payload = client.dev.import_git(repo_url, token=token, ref=ref)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -230,7 +276,7 @@ def keys_list() -> None:
     try:
         with _client() as client:
             payload = client.dev.list_keys()
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 
@@ -244,7 +290,7 @@ def keys_rotate(
     try:
         with _client() as client:
             payload = client.dev.rotate_key(key_id)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     secret = _new_secret(payload)
     if isinstance(payload, dict):
@@ -277,7 +323,7 @@ def keys_revoke(
     try:
         with _client() as client:
             payload = client.dev.revoke_key(key_id)
-    except (AifluxxError, OSError) as exc:
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
     typer.echo(_pretty(payload))
 

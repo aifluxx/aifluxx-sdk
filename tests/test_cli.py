@@ -64,7 +64,7 @@ def test_login_rewrites_retired_host(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.truest.biz"])
     assert result.exit_code == 0, result.output
     assert "retired" in result.output
-    assert load_credentials(store).url == "https://api.truest.ae"
+    assert load_credentials(store).url == "https://api.aifluxx.co.za"
 
 
 def test_login_uses_env_url(tmp_path: Path, monkeypatch):
@@ -138,6 +138,44 @@ def test_keys_list_rotate_revoke(tmp_path: Path, monkeypatch):
     revoked = runner.invoke(app, ["keys", "revoke", "k1", "--yes"])
     assert revoked.exit_code == 0, revoked.output
     assert "revoked" in revoked.output
+
+
+def test_run_reads_slug_from_package_or_argument(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
+    assert created.exit_code == 0, created.output
+    monkeypatch.chdir(tmp_path / "my-agent")
+    seen: dict[str, str] = {}
+
+    class _Dev:
+        def run(self, slug, prompt, *, version=None, lock=None):
+            seen["slug"] = slug
+            seen["prompt"] = prompt
+            yield "ok"
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    inside = runner.invoke(app, ["run", "Summarise open tasks"])
+    assert inside.exit_code == 0, inside.output
+    assert seen == {"slug": "my-agent", "prompt": "Summarise open tasks"}
+    explicit = runner.invoke(app, ["run", "other-agent", "Hello there"])
+    assert explicit.exit_code == 0, explicit.output
+    assert seen == {"slug": "other-agent", "prompt": "Hello there"}
+
+
+def test_run_outside_package_requires_slug(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["run", "just a prompt"])
+    assert result.exit_code == 1
+    assert "slug" in result.output.lower()
 
 
 def test_validate_without_package(tmp_path: Path, monkeypatch):

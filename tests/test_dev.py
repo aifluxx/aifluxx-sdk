@@ -3,18 +3,26 @@ import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from aifluxx_sdk.dev import DevClient, _tarball
-from aifluxx_sdk.exceptions import AifluxxError, HostUnavailable
+from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
+from aifluxx_sdk.lockfile import load_lock
+from aifluxx_sdk.templates import get_template, render_spec
+
+_VERSION = "11111111-1111-1111-1111-111111111111"
 
 
 class _Res:
-    def __init__(self, status_code=200, payload=None, text=""):
+    def __init__(self, status_code=200, payload=None, text="", headers=None, method="GET", url="https://api.example/x"):
         self.status_code = status_code
         self._payload = payload if payload is not None else {}
         self.content = b"{}" if payload is not None else b""
         self.text = text
+        self.headers = headers or {}
+        self.is_stream_consumed = True
+        self.request = type("Req", (), {"method": method, "url": url})()
 
     def json(self):
         return self._payload
@@ -45,6 +53,156 @@ def test_key_id_rejects_slash():
     client = DevClient(MagicMock(), "https://api.example")
     with pytest.raises(AifluxxError, match="invalid"):
         client.rotate_key("a/b")
+
+
+def test_submit_resolves_uuid_and_never_sends_latest():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        200,
+        {
+            "agents": [
+                {
+                    "slug": "board",
+                    "versions": [
+                        {"id": _VERSION, "version": "0.1.0", "state": "draft", "created_at": "2026-10-25T00:00:00Z"}
+                    ],
+                }
+            ]
+        },
+    )
+    http.post.return_value = _Res(200, {"ok": True})
+    client = DevClient(http, "https://api.example")
+    client.submit("board", "latest")
+    sent = http.post.call_args[0][0]
+    assert sent.endswith(f"/versions/{_VERSION}/submit")
+    assert "latest" not in sent
+
+
+def test_submit_without_uuid_raises_before_post():
+    http = MagicMock()
+    http.get.return_value = _Res(200, {"agents": []})
+    client = DevClient(http, "https://api.example")
+    with pytest.raises(AifluxxError, match="version UUID"):
+        client.submit("missing", None)
+    http.post.assert_not_called()
+
+
+def test_push_stores_version_uuid(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    (package / "spec.yaml").write_text(render_spec("agent", template), encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http = MagicMock()
+    http.post.return_value = _Res(200, {"id": _VERSION, "version": "0.1.0", "state": "draft"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    lock = load_lock(package)
+    assert lock is not None
+    assert lock.version_id == _VERSION
+    assert (package / ".aifluxx" / "agent.lock").is_file()
+    assert not (package / ".truest").exists()
+    client.submit("agent", lock=lock)
+    assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def test_401_includes_host_body():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        401,
+        {"detail": "Sign in again to create a key."},
+        method="GET",
+        url="https://api.aifluxx.co.za/api/dev/agents",
+    )
+    client = DevClient(http, "https://api.aifluxx.co.za")
+    with pytest.raises(AuthError, match="Sign in again to create a key") as caught:
+        client.me()
+    text = str(caught.value)
+    assert "401" in text
+    assert "host" in text.lower()
+
+
+def test_500_includes_host_body():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        500,
+        {"detail": "boom"},
+        method="POST",
+        url="https://api.aifluxx.co.za/api/dev/agents/board/versions",
+    )
+    client = DevClient(http, "https://api.aifluxx.co.za")
+    with pytest.raises(AifluxxError, match="boom") as caught:
+        client.status()
+    text = str(caught.value)
+    assert "500" in text
+    assert "API error" in text
+
+
+def test_307_to_http_is_reported():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        307,
+        headers={"location": "http://api.aifluxx.co.za/mcp/"},
+        method="GET",
+        url="https://api.aifluxx.co.za/mcp",
+    )
+    client = DevClient(http, "https://api.aifluxx.co.za")
+    with pytest.raises(AifluxxError, match="http://api.aifluxx.co.za/mcp/") as caught:
+        client.me()
+    text = str(caught.value)
+    assert "307" in text
+    assert "downgrad" in text
+
+
+class _Unread:
+    def __init__(self):
+        self.status_code = 500
+        self.headers = {}
+        self.is_stream_consumed = False
+        self.read_called = False
+        self.request = type(
+            "Req",
+            (),
+            {"method": "POST", "url": f"https://api.example/api/dev/agents/board/versions/{_VERSION}/runs"},
+        )()
+
+    def read(self):
+        self.read_called = True
+        self.is_stream_consumed = True
+        return b'{"detail":"Internal Server Error"}'
+
+    def json(self):
+        if not self.read_called:
+            raise httpx.ResponseNotRead("Attempted to access streaming response content")
+        return {"detail": "Internal Server Error"}
+
+    @property
+    def text(self):
+        if not self.read_called:
+            raise httpx.ResponseNotRead("Attempted to access streaming response content")
+        return "Internal Server Error"
+
+    @property
+    def content(self):
+        if not self.read_called:
+            raise httpx.ResponseNotRead("Attempted to access streaming response content")
+        return b"{}"
+
+    def iter_lines(self):
+        if not self.read_called:
+            raise httpx.ResponseNotRead("Attempted to access streaming response content")
+        yield "should-not-stream"
+
+
+def test_run_reads_streamed_error_body():
+    http = MagicMock()
+    res = _Unread()
+    http.stream.return_value.__enter__.return_value = res
+    client = DevClient(http, "https://api.example")
+    with pytest.raises(AifluxxError, match="Internal Server Error") as caught:
+        list(client.run("board", "hello", version=_VERSION))
+    assert res.read_called
+    assert "ResponseNotRead" not in str(caught.value)
 
 
 def test_tarball_skips_local_meta(tmp_path: Path):

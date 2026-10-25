@@ -25,11 +25,25 @@ def test_default_url_is_aifluxx(monkeypatch):
 
 def test_platform_and_url_precedence(monkeypatch):
     monkeypatch.setenv("AIFLUXX_API_URL", "https://api.truest.biz")
-    assert resolve_api_url() == "https://api.truest.ae"
+    assert resolve_api_url() == "https://api.aifluxx.co.za"
     assert resolve_api_url(platform="truest") == "https://api.truest.ae"
     assert resolve_api_url(url="https://api.example/root/", platform="truest") == "https://api.example/root"
     with pytest.raises(AuthError, match="Unknown platform"):
         resolve_api_url(platform="nope")
+
+
+def test_default_store_is_aifluxx_home(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.delenv("AIFLUXX_CREDENTIALS", raising=False)
+    monkeypatch.delenv("TRUEST_CREDENTIALS", raising=False)
+    monkeypatch.setattr("aifluxx_sdk.credentials.Path.home", lambda: home)
+    assert credentials_path() == home / ".aifluxx" / "credentials"
+
+
+def test_aifluxx_credentials_override_wins(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "new"))
+    monkeypatch.setenv("TRUEST_CREDENTIALS", str(tmp_path / "old"))
+    assert credentials_path() == tmp_path / "new"
 
 
 def test_legacy_credentials_env(tmp_path: Path, monkeypatch):
@@ -51,10 +65,10 @@ def test_migrates_legacy_home(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.delenv("TRUEST_CREDENTIALS", raising=False)
     monkeypatch.setattr("aifluxx_sdk.credentials.Path.home", lambda: home)
     creds = load_credentials()
-    assert creds.url == "https://api.truest.ae"
+    assert creds.url == "https://api.aifluxx.co.za"
     assert creds.api_key == "afx_dev_legacy"
     stored = json.loads((home / ".aifluxx" / "credentials").read_text(encoding="utf-8"))
-    assert stored["url"] == "https://api.truest.ae"
+    assert stored["url"] == "https://api.aifluxx.co.za"
     assert "Copied credentials" in capsys.readouterr().err
     mode = (home / ".aifluxx" / "credentials").stat().st_mode & 0o777
     assert mode == 0o600
@@ -67,8 +81,8 @@ def test_load_rewrites_retired_host(tmp_path: Path):
         encoding="utf-8",
     )
     creds = load_credentials(store)
-    assert creds.url == "https://api.truest.ae"
-    assert json.loads(store.read_text(encoding="utf-8"))["url"] == "https://api.truest.ae"
+    assert creds.url == "https://api.aifluxx.co.za"
+    assert json.loads(store.read_text(encoding="utf-8"))["url"] == "https://api.aifluxx.co.za"
 
 
 def test_lock_reads_legacy_and_writes_aifluxx(tmp_path: Path):
@@ -81,6 +95,7 @@ def test_lock_reads_legacy_and_writes_aifluxx(tmp_path: Path):
     loaded = load_lock(tmp_path)
     assert loaded is not None
     assert loaded.slug == "board-pack"
+    assert (tmp_path / ".aifluxx" / "agent.lock").is_file()
     save_lock(tmp_path, AgentLock(id="1", slug="board-pack", last_pushed_version="0.2.0"))
     assert json.loads((tmp_path / ".aifluxx" / "agent.lock").read_text(encoding="utf-8"))["last_pushed_version"] == "0.2.0"
     assert load_lock(tmp_path).last_pushed_version == "0.2.0"

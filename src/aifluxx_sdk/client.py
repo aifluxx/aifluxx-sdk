@@ -24,6 +24,7 @@ class AifluxxClient:
             base_url=self.url,
             headers={"Authorization": f"Bearer {api_key.strip()}"},
             timeout=timeout,
+            follow_redirects=False,
         )
         self.mail = MailClient(self._http, self.url)
         self.dev = DevClient(self._http, self.url)

@@ -24,7 +24,7 @@ _CONFIG_DIR = ".aifluxx"
 
 
 def normalize_api_url(url: str) -> str:
-    """Return a canonical API root. `api.truest.biz` is rewritten to `api.truest.ae`."""
+    """Return a canonical API root. `api.truest.biz` is rewritten to the AIfluxx default."""
     cleaned = (url or "").strip().rstrip("/")
     if not cleaned:
         return cleaned
@@ -34,7 +34,7 @@ def normalize_api_url(url: str) -> str:
     host, sep, tail = rest.partition("/")
     hostname, colon, port = host.partition(":")
     if hostname.lower() == RETIRED_HOST:
-        host = "api.truest.ae" + (colon + port if colon else "")
+        host = "api.aifluxx.co.za" + (colon + port if colon else "")
         rest = host + (sep + tail if sep else "")
         cleaned = f"{scheme}://{rest}"
     return cleaned.rstrip("/")
