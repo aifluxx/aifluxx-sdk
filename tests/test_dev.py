@@ -1,4 +1,5 @@
 import io
+import json
 import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -102,8 +103,47 @@ def test_push_stores_version_uuid(tmp_path: Path):
     assert lock.version_id == _VERSION
     assert (package / ".aifluxx" / "agent.lock").is_file()
     assert not (package / ".truest").exists()
+    _assert_push_upload(http.post.call_args_list[0], "agent")
     client.submit("agent", lock=lock)
     assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def _assert_push_upload(call, slug: str) -> None:
+    assert call.args[0] == f"https://api.example/api/dev/agents/{slug}/versions"
+    assert set(call.kwargs) == {"files"}
+    files = call.kwargs["files"]
+    assert set(files) == {"package", "metadata"}
+
+    filename, archive, package_type = files["package"]
+    assert filename == "package.tar.gz"
+    assert package_type == "application/gzip"
+    assert archive[:2] == b"\x1f\x8b"
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+        names = tar.getnames()
+    assert "spec.yaml" in names
+    assert all(".aifluxx" not in Path(name).parts and ".truest" not in Path(name).parts for name in names)
+
+    meta_filename, meta_bytes, meta_type = files["metadata"]
+    assert meta_filename is None
+    assert meta_type == "application/json"
+    meta = json.loads(meta_bytes)
+    assert set(meta) == {"slug", "version", "schema", "spec"}
+    assert meta["slug"] == slug
+    assert meta["version"] == "0.1.0"
+    assert meta["schema"] == "aifluxx/agent/v1"
+    assert meta["spec"]["slug"] == slug
+    assert meta["spec"]["version"] == "0.1.0"
+
+    request = httpx.Request("POST", call.args[0], files=files)
+    request.read()
+    content_type = request.headers["content-type"]
+    assert content_type.startswith("multipart/form-data; boundary=")
+    assert not request.content.startswith(b"\x1f\x8b")
+    assert b'name="package"; filename="package.tar.gz"' in request.content
+    assert b"Content-Type: application/gzip" in request.content
+    assert b'name="metadata"' in request.content
+    assert b'filename="metadata' not in request.content
+    assert b"Content-Type: application/json" in request.content
 
 
 def test_401_includes_host_body():

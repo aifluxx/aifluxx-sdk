@@ -74,6 +74,17 @@ aifluxx submit
 
 `init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. New packages use schema `aifluxx/agent/v1`. `truest/agent/v1` still validates. `validate` is offline. `push` uploads the folder and creates a Draft. It does not `git push`.
 
+`aifluxx push` sends one request:
+
+| | |
+|---|---|
+| Method and path | `POST /api/dev/agents/{slug}/versions` |
+| Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` and `.truest` are left out. |
+| Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
+
+The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
+
 `run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API.
 
 `submit` and `run` call `/api/dev/agents/{slug}/versions/{version_id}/...`. `version_id` is a UUID. The CLI does not send the word `latest` or a semver such as `0.1.0` in that path. It uses the UUID saved at push, or looks the slug up with `GET /api/dev/agents`. Pass `--version <uuid>` to choose one yourself. A semver passed to `--version` is looked up, not sent as the path id.

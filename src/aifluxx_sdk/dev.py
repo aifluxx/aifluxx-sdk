@@ -36,10 +36,11 @@ class DevClient:
             raise AifluxxError(f"Package failed validate ({codes}). Run `aifluxx validate`.")
         slug = str(report.spec.get("slug") or package_dir.name)
         version = str(report.spec.get("version") or "0.1.0")
-        archive = _tarball(package_dir)
+        # One upload shape: multipart/form-data, file field "package" (.tar.gz)
+        # and form field "metadata" (application/json). Never a raw gzip body.
         res = self._http.post(
             f"{self._api_root}/api/dev/agents/{slug}/versions",
-            files={"package": ("package.tar.gz", archive, "application/gzip")},
+            files=version_upload(package_dir, report.spec, slug, version),
         )
         payload = self._json(res)
         version_id = version_uuid_from_push(payload if isinstance(payload, dict) else {}, version)
@@ -350,6 +351,35 @@ def _versions_for_slug(payload: Any, slug: str) -> list[dict[str, Any]]:
 
     walk(payload, False)
     return list(found.values())
+
+
+def version_upload(package_dir: Path, spec: dict[str, Any], slug: str, version: str) -> dict[str, tuple[Any, ...]]:
+    """Multipart parts for ``POST /api/dev/agents/{slug}/versions``.
+
+    The request ``Content-Type`` is ``multipart/form-data`` with a boundary
+    chosen by the HTTP client. There is no raw gzip body and no
+    ``Content-Type: application/gzip`` on the request.
+
+    * ``package`` — file part, filename ``package.tar.gz``, part
+      ``Content-Type: application/gzip``. Bytes are a gzip-compressed ustar
+      archive (magic ``1f 8b``). Member names are paths relative to the
+      package root. ``.aifluxx`` and ``.truest`` are omitted.
+    * ``metadata`` — form field (no filename), part
+      ``Content-Type: application/json``. UTF-8 JSON object with keys
+      ``slug``, ``version`` (semver from spec.yaml), ``schema``, and ``spec``
+      (the parsed spec.yaml object).
+    """
+    metadata = {
+        "slug": slug,
+        "version": version,
+        "schema": spec.get("schema"),
+        "spec": spec,
+    }
+    encoded = json.dumps(metadata, ensure_ascii=False).encode("utf-8")
+    return {
+        "package": ("package.tar.gz", _tarball(package_dir), "application/gzip"),
+        "metadata": (None, encoded, "application/json"),
+    }
 
 
 def _tarball(package_dir: Path) -> bytes:
