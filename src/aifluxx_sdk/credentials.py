@@ -138,11 +138,36 @@ def _migrate(legacy: Path, dest: Path) -> None:
     _harden(dest.parent, directory=True)
     dest.write_text(json.dumps({"url": url, "api_key": api_key}, indent=2) + "\n", encoding="utf-8")
     _harden(dest, directory=False)
-    print(f"Copied credentials from {legacy} to {dest}.", file=sys.stderr)
+    try:
+        legacy.unlink()
+    except OSError as exc:
+        raise AuthError(f"Moved credentials to {dest} but could not remove {legacy}: {exc}.") from exc
+    print(f"Moved credentials from {legacy} to {dest}.", file=sys.stderr)
 
 
 def _harden(path: Path, *, directory: bool) -> None:
+    mode = 0o700 if directory else 0o600
     try:
-        path.chmod(0o700 if directory else 0o600)
+        path.chmod(mode)
+        actual = path.stat().st_mode & 0o777
+    except OSError as exc:
+        _drop_unlocked_secret(path, directory)
+        raise AuthError(
+            f"Could not set mode {mode:04o} on {path}: {exc}. "
+            "Refusing to keep an API key this process cannot lock down."
+        ) from exc
+    if actual != mode:
+        _drop_unlocked_secret(path, directory)
+        raise AuthError(
+            f"chmod {mode:04o} on {path} did not stick (mode is {actual:04o}). "
+            "Refusing to keep an API key this process cannot lock down."
+        )
+
+
+def _drop_unlocked_secret(path: Path, directory: bool) -> None:
+    if directory:
+        return
+    try:
+        path.unlink(missing_ok=True)
     except OSError:
         pass

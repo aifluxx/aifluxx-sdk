@@ -1,5 +1,6 @@
 # Publish to PyPI with trusted publishing (OIDC). No API token.
 # Does not run on branch pushes or pull requests.
+# A tag matching v* publishes. Do not create a v* tag to test this workflow.
 #
 # Before the first run, add this workflow as a PyPI trusted publisher:
 #   owner: aifluxx

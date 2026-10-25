@@ -57,7 +57,7 @@ aifluxx login --platform truest
 
 `https://api.truest.biz` is retired. The CLI rewrites it to `https://api.aifluxx.co.za`. It is not a profile and it is not the default. `--platform truest` is what selects `https://api.truest.ae`.
 
-Credentials are written to `~/.aifluxx/credentials` (mode `0600`). If that file is missing and `~/.truest/credentials` exists, the CLI copies it into `~/.aifluxx/` and rewrites a retired host. The override for that path is `AIFLUXX_CREDENTIALS`. `TRUEST_CREDENTIALS` still works and prints a deprecation warning. The file stays on your machine. Do not commit it.
+Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. If `~/.aifluxx/credentials` is missing and `~/.truest/credentials` exists, the CLI moves that file into `~/.aifluxx/`, rewrites a retired host, and deletes `~/.truest/credentials`. The override for the path is `AIFLUXX_CREDENTIALS`. `TRUEST_CREDENTIALS` still works and prints a deprecation warning. The file stays on your machine. Do not commit it.
 
 `truest` still runs this program and prints a deprecation warning. Use `aifluxx`.
 
@@ -171,3 +171,5 @@ twine check dist/*
 ```
 
 Requires Python 3.11 or newer.
+
+Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI.

@@ -6,9 +6,11 @@ import pytest
 from aifluxx_sdk.credentials import (
     DEFAULT_URL,
     PLATFORMS,
+    Credentials,
     credentials_path,
     load_credentials,
     resolve_api_url,
+    save_credentials,
 )
 from aifluxx_sdk.exceptions import AuthError
 from aifluxx_sdk.lockfile import AgentLock, load_lock, save_lock
@@ -69,9 +71,41 @@ def test_migrates_legacy_home(tmp_path: Path, monkeypatch, capsys):
     assert creds.api_key == "afx_dev_legacy"
     stored = json.loads((home / ".aifluxx" / "credentials").read_text(encoding="utf-8"))
     assert stored["url"] == "https://api.aifluxx.co.za"
-    assert "Copied credentials" in capsys.readouterr().err
+    assert "Moved credentials" in capsys.readouterr().err
+    assert not (legacy / "credentials").exists()
     mode = (home / ".aifluxx" / "credentials").stat().st_mode & 0o777
     assert mode == 0o600
+
+
+def test_chmod_0600_failure_raises_and_removes_key(tmp_path: Path, monkeypatch):
+    store = tmp_path / "locked" / "credentials"
+    real_chmod = Path.chmod
+
+    def chmod(self: Path, mode: int) -> None:
+        if mode == 0o600:
+            raise OSError("operation not permitted")
+        real_chmod(self, mode)
+
+    monkeypatch.setattr(Path, "chmod", chmod)
+    with pytest.raises(AuthError, match="0600"):
+        save_credentials(Credentials(url=DEFAULT_URL, api_key="afx_dev_secret"), store)
+    assert not store.exists()
+
+
+def test_chmod_0600_that_does_not_stick_raises(tmp_path: Path, monkeypatch):
+    store = tmp_path / "credentials"
+    real_chmod = Path.chmod
+
+    def chmod(self: Path, mode: int) -> None:
+        if mode == 0o600:
+            real_chmod(self, 0o644)
+            return
+        real_chmod(self, mode)
+
+    monkeypatch.setattr(Path, "chmod", chmod)
+    with pytest.raises(AuthError, match="did not stick"):
+        save_credentials(Credentials(url=DEFAULT_URL, api_key="afx_dev_secret"), store)
+    assert not store.exists()
 
 
 def test_load_rewrites_retired_host(tmp_path: Path):

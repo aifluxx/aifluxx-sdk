@@ -178,6 +178,43 @@ def test_500_includes_host_body():
     assert "API error" in text
 
 
+def test_307_to_http_is_not_followed(monkeypatch):
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.scheme != "https":
+            return httpx.Response(200, json={"followed": True})
+        return httpx.Response(307, headers={"location": "http://api.aifluxx.co.za/mcp/"})
+
+    real_client = httpx.Client
+
+    def client_factory(*args, **kwargs):
+        assert kwargs.get("follow_redirects") is False
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", client_factory)
+    from aifluxx_sdk.client import AifluxxClient
+    from aifluxx_sdk.mail import SendFailed
+
+    client = AifluxxClient("https://api.aifluxx.co.za", api_key="afx_dev_secret")
+    try:
+        assert client._http.follow_redirects is False
+        with pytest.raises(AifluxxError, match="http://api.aifluxx.co.za/mcp/") as caught:
+            client.dev.me()
+        assert "downgrad" in str(caught.value)
+        with pytest.raises(SendFailed, match="http://api.aifluxx.co.za/mcp/"):
+            client.mail.mailboxes(business_id="co")
+    finally:
+        client.close()
+    assert requested == [
+        "https://api.aifluxx.co.za/api/dev/me",
+        "https://api.aifluxx.co.za/api/companies/co/mail/mailboxes",
+    ]
+    assert all(url.startswith("https://") for url in requested)
+
+
 def test_307_to_http_is_reported():
     http = MagicMock()
     http.get.return_value = _Res(
