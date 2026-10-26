@@ -385,7 +385,8 @@ def version_upload(package_dir: Path, spec: dict[str, Any], slug: str, version: 
     * ``package`` — file part, filename ``package.tar.gz``, part
       ``Content-Type: application/gzip``. Bytes are a gzip-compressed ustar
       archive (magic ``1f 8b``). Member names are paths relative to the
-      package root. ``.aifluxx`` is omitted.
+      package root. ``.aifluxx`` and a leftover metadata directory from an
+      older install are omitted.
     * ``metadata`` — form field (no filename), part
       ``Content-Type: application/json``. UTF-8 JSON object with keys
       ``slug``, ``version`` (semver from spec.yaml), ``schema``, and ``spec``

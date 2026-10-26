@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from aifluxx_sdk.dev import DevClient, _tarball
+from aifluxx_sdk.package import LOCAL_META_DIRS
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.templates import get_template, render_spec
@@ -149,6 +150,22 @@ def test_push_stores_version_uuid(tmp_path: Path):
     _assert_push_upload(http.post.call_args_list[0], "agent")
     client.submit("agent", lock=lock)
     assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def test_push_version_id_stays_empty_without_a_version_uuid(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    (package / "spec.yaml").write_text(render_spec("agent", template), encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http = MagicMock()
+    http.post.return_value = _Res(200, {"id": "agent-1", "slug": "agent", "version": "0.1.0"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    lock = load_lock(package)
+    assert lock is not None
+    assert lock.last_pushed_version == "0.1.0"
+    assert lock.version_id is None
 
 
 def _assert_push_upload(call, slug: str) -> None:
@@ -329,9 +346,11 @@ def test_tarball_skips_local_meta(tmp_path: Path):
     package = tmp_path / "pkg"
     package.mkdir()
     (package / "spec.yaml").write_text("schema: aifluxx/agent/v1\n", encoding="utf-8")
-    folder = package / ".aifluxx"
-    folder.mkdir()
-    (folder / "agent.lock").write_text("{}\n", encoding="utf-8")
+    assert len(LOCAL_META_DIRS) >= 2
+    for name in LOCAL_META_DIRS:
+        folder = package / name
+        folder.mkdir()
+        (folder / "agent.lock").write_text("{}\n", encoding="utf-8")
     with tarfile.open(fileobj=io.BytesIO(_tarball(package)), mode="r:gz") as archive:
         names = archive.getnames()
     assert names == ["spec.yaml"]

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from aifluxx_sdk.package import validate_package
+from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
 from aifluxx_sdk.templates import get_template, render_spec
 
 
@@ -48,9 +48,12 @@ def test_write_tool_not_allowed(tmp_path: Path):
 
 def test_secret_in_local_meta_is_ignored(tmp_path: Path):
     pkg = _write_ok(tmp_path)
-    meta = pkg / ".aifluxx"
-    meta.mkdir()
-    (meta / "agent.lock").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    assert ".aifluxx" in LOCAL_META_DIRS
+    assert len(LOCAL_META_DIRS) >= 2
+    for name in LOCAL_META_DIRS:
+        meta = pkg / name
+        meta.mkdir()
+        (meta / "agent.lock").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
     report = validate_package(pkg)
     assert report.ok
 

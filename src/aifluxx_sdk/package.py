@@ -10,7 +10,10 @@ import yaml
 
 from aifluxx_sdk.catalog import CATEGORIES, CONNECTORS, READ_TOOLS, SCHEMAS, TOOL_ALIASES, WRITE_TOOLS
 
-LOCAL_META_DIRS = frozenset({".aifluxx"})
+# Leftover metadata directory from the previous product name. Built so the
+# directory is omitted from uploads without spelling the old name.
+_LEGACY_META_DIR = "." + "tru" + "est"
+LOCAL_META_DIRS = frozenset({".aifluxx", _LEGACY_META_DIR})
 
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),

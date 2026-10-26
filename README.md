@@ -84,7 +84,7 @@ aifluxx submit
 |---|---|
 | Method and path | `POST /api/dev/agents/{slug}/versions` |
 | Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
-| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` is left out. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` and a leftover metadata directory from an older install are left out. |
 | Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
@@ -103,7 +103,7 @@ aifluxx keys rotate <key-id>
 aifluxx keys revoke <key-id>
 ```
 
-After a successful push the CLI writes `.aifluxx/agent.lock` in the package, including the version UUID. That directory is not uploaded.
+After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is the version UUID when the push response includes one, and `null` when it does not. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
 
 ## Getting a developer key
 

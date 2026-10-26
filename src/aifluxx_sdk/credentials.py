@@ -35,15 +35,22 @@ def normalize_api_url(url: str) -> str:
     return (url or "").strip().rstrip("/")
 
 
+def _api_hostname(url: str) -> str:
+    """Hostname of ``url``, lowercased, with a trailing DNS-root dot removed."""
+    return (urlparse(url or "").hostname or "").lower().rstrip(".")
+
+
 def is_prod_api_url(url: str) -> bool:
     """True when ``url`` is a production API or developer-portal host."""
-    host = (urlparse(url or "").hostname or "").lower()
-    return host in PROD_HOSTS
+    return _api_hostname(url) in PROD_HOSTS
 
 
 def dev_key_on_prod_host(api_key: str, url: str) -> bool:
-    """True when an ``afx_dev_`` key is aimed at a production host."""
-    return (api_key or "").startswith("afx_dev_") and is_prod_api_url(url)
+    """True when an ``afx_dev_`` key is aimed at a production host.
+
+    ``api.aifluxx.co.za.`` is the same host as ``api.aifluxx.co.za``.
+    """
+    return (api_key or "").startswith("afx_dev_") and _api_hostname(url) in PROD_HOSTS
 
 
 def resolve_api_url(*, url: str | None = None, platform: str | None = None) -> str:

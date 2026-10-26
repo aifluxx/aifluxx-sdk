@@ -36,8 +36,11 @@ def test_platform_and_url_precedence(monkeypatch):
     with pytest.raises(AuthError, match="Unknown platform"):
         resolve_api_url(platform="nope")
     assert dev_key_on_prod_host("afx_dev_k", DEFAULT_URL)
-    assert dev_key_on_prod_host("afx_dev_k", "https://developer.aifluxx.co.za/api")
+    assert dev_key_on_prod_host("afx_dev_k", "https://api.aifluxx.co.za.")
+    assert dev_key_on_prod_host("afx_dev_k", "https://API.AIFLUXX.CO.ZA./api")
+    assert dev_key_on_prod_host("afx_dev_k", "https://developer.aifluxx.co.za./api")
     assert not dev_key_on_prod_host("afx_dev_k", DEV_URL)
+    assert not dev_key_on_prod_host("afx_dev_k", "https://dev.developer.aifluxx.co.za.")
     assert not dev_key_on_prod_host("afx_dev_k", "https://dev.aifluxx.co.za")
     assert not dev_key_on_prod_host("afx_dev_k", "https://api.example")
     assert not dev_key_on_prod_host("afx_live_k", DEFAULT_URL)
