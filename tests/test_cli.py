@@ -583,10 +583,16 @@ def test_init_list_and_missing_slug(tmp_path: Path, monkeypatch):
     assert "compliance [default]" in text
     assert "finance" in text
     assert "search_company_knowledge" in text
+    assert "tools: list_obligations" in text
+    assert "ask_assistant" in text
+    assert "get_document" not in text
+    assert "truest" not in text.lower()
     assert "search_documents" not in text
     assert "list_compliance_obligations" not in text
     assert "get_compliance_status" not in text
     assert "alias: compliance-checklist" in text
+    assert "alias: finance-summariser" in text
+    assert "alias: qa-documents" in text
     assert list(tmp_path.iterdir()) == []
     raw = runner.invoke(app, ["init", "--list", "--json"])
     payload = json.loads(raw.output)
@@ -610,6 +616,8 @@ def test_init_prompts_for_slug(tmp_path: Path, monkeypatch):
     spec = (tmp_path / "prompted-agent" / "spec.yaml").read_text(encoding="utf-8")
     assert "slug: prompted-agent" in spec
     assert "search_company_knowledge" in spec
+    assert "ask_assistant" in spec
+    assert "get_document" not in spec
 
 
 def test_validate_uses_host_catalogue(tmp_path: Path, monkeypatch):
@@ -621,7 +629,7 @@ def test_validate_uses_host_catalogue(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["validate", str(tmp_path / "my-agent")])
     text = _text(result)
     assert result.exit_code == 1
-    assert "search_company_knowledge" in text
+    assert "list_obligations" in text
     assert "host tool catalogue" in text
 
 
@@ -678,6 +686,9 @@ def test_init_help_default_is_the_listed_template():
     listed = _text(runner.invoke(app, ["init", "--list"]))
     assert "[default: compliance]" in help_text
     assert "compliance-checklist is an alias for compliance" in help_text
+    assert "finance-summariser is an alias for finance" in help_text
+    assert "qa-documents is an alias for qa-over-documents" in help_text
+    assert "truest" not in help_text.lower()
     template_ids = []
     alias_names = []
     for line in listed.splitlines():

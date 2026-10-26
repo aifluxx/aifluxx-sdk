@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Starter tools and aliases match `GET /api/dev/templates`. `compliance` scaffolds `list_obligations`. `finance` and the document Q&A starter scaffold `ask_assistant`. `standup` and `account-snapshot` no longer add `get_document`. `finance-summariser` and `qa-documents` select those starters, along with `compliance-checklist`. The ask tool id follows the API host.
+
 ### Breaking
 
 - The legacy agent schema id is no longer accepted. Packages must use `aifluxx/agent/v1`.

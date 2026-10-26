@@ -4,6 +4,8 @@
 This module is the offline copy used when that catalogue is missing.
 ``list_compliance_obligations`` and ``get_compliance_status`` are not in the
 copy: the host rejects them with ``422 unknown_tool``.
+``list_obligations`` and ``ask_assistant`` are the ids starters declare.
+``ask_truest`` is that ask id on a truest.ae host.
 """
 from __future__ import annotations
 
@@ -14,6 +16,9 @@ READ_TOOLS = frozenset(
     {
         "search_company_knowledge",
         "get_document",
+        "list_obligations",
+        "ask_assistant",
+        "ask_truest",
         "list_mandate_tasks",
         "list_contacts",
         "list_businesses",

@@ -6,10 +6,12 @@ def test_default_templates_use_the_bundled_allow_list():
     assert "list_compliance_obligations" not in READ_TOOLS
     assert "get_compliance_status" not in READ_TOOLS
     assert "search_company_knowledge" in READ_TOOLS
+    assert "list_obligations" in READ_TOOLS
+    assert "ask_assistant" in READ_TOOLS
     assert "search_documents" not in READ_TOOLS
     for template in TEMPLATES.values():
-        assert "search_company_knowledge" in template.tools
         assert "search_documents" not in template.tools
+        assert "get_document" not in template.tools
         assert set(template.tools) <= READ_TOOLS
 
 

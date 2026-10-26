@@ -55,12 +55,12 @@ def test_tools_catalogue_and_push_uses_it(tmp_path: Path):
 def test_push_accepts_host_tool_absent_from_bundle(tmp_path: Path):
     package = tmp_path / "agent"
     package.mkdir()
-    template = get_template("qa-over-documents")
+    template = get_template("standup")
     spec = render_spec("agent", template).replace("search_company_knowledge", "list_open_filings")
     (package / "spec.yaml").write_text(spec, encoding="utf-8")
     (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
     http = MagicMock()
-    http.get.return_value = _Res(200, ["list_open_filings", "get_document"])
+    http.get.return_value = _Res(200, ["list_open_filings", "list_mandate_tasks"])
     http.post.return_value = _Res(200, {"id": _VERSION, "version": "0.1.0", "state": "draft"})
     client = DevClient(http, "https://api.example")
     client.push(package)
