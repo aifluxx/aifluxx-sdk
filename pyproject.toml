@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aifluxx-sdk"
 version = "0.1.0"
-description = "Python client and aifluxx CLI for the AIfluxx developer API."
+description = "Python client and aifluxx CLI for the AIFluxx developer API."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
-authors = [{ name = "AIfluxx" }]
+authors = [{ name = "AIFluxx" }]
 keywords = ["aifluxx", "agents", "sdk", "cli"]
 classifiers = [
   "Development Status :: 4 - Beta",

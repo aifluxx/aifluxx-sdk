@@ -1,4 +1,4 @@
-"""Python client for AIfluxx (mail send now; A2A skills when the server is up)."""
+"""Python client for AIFluxx (mail send now; A2A skills when the server is up)."""
 
 from importlib.metadata import PackageNotFoundError, version
 

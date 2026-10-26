@@ -135,7 +135,15 @@ def slug_to_name(slug: str) -> str:
     return " ".join(part.capitalize() for part in slug.replace("_", "-").split("-"))
 
 
-def render_spec(slug: str, template: Template) -> str:
+def _spec_currency(currency: str | None) -> str:
+    code = (currency or "").strip().upper()
+    if len(code) == 3 and code.isalpha():
+        return code
+    return "USD"
+
+
+def render_spec(slug: str, template: Template, *, currency: str | None = None) -> str:
+    """Render spec.yaml. ``currency`` is an ISO code; anything else stays USD."""
     tools = "\n".join(f"  - {tool}" for tool in template.tools)
     knowledge = ""
     if template.knowledge:
@@ -151,5 +159,5 @@ def render_spec(slug: str, template: Template) -> str:
         "trigger:\n  type: chat\n"
         f"tools:\n{tools}\n"
         f"{knowledge}"
-        "pricing:\n  model: free\n  amount_minor: 0\n  currency: USD\n"
+        f"pricing:\n  model: free\n  amount_minor: 0\n  currency: {_spec_currency(currency)}\n"
     )

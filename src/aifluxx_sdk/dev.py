@@ -266,27 +266,85 @@ def _version_hint(version: str | None) -> str:
     return hint
 
 
+_VERSION_ID_KEYS = ("version_id", "versionId")
+# Objects that are the version itself, not the agent that owns it.
+_NESTED_VERSION_KEYS = ("version", "latest_version", "created_version", "draft")
+_VERSION_ROW_KEYS = ("versions", "drafts")
+_ENVELOPE_KEYS = ("agent", "data", "result")
+
+
 def version_uuid_from_push(payload: dict[str, Any], semver: str) -> str | None:
-    for key in ("version_id", "versionId"):
-        if _is_uuid(payload.get(key)):
-            return str(payload[key]).strip()
-    nested = payload.get("version")
-    if isinstance(nested, dict):
-        for key in ("id", "version_id", "versionId"):
-            if _is_uuid(nested.get(key)):
-                return str(nested[key]).strip()
-    rows = payload.get("versions")
-    if isinstance(rows, list):
-        chosen = _prefer([row for row in rows if isinstance(row, dict)])
-        if chosen is not None:
-            vid = chosen.get("version_id") or chosen.get("id")
-            if _is_uuid(vid):
-                return str(vid).strip()
-    if _is_uuid(payload.get("id")) and isinstance(payload.get("version"), str):
-        if payload.get("version") == semver or payload.get("state") or payload.get("status"):
-            if not (payload.get("slug") and not (payload.get("state") or payload.get("status"))):
-                return str(payload["id"]).strip()
+    """Version UUID from a push response.
+
+    Explicit ``version_id`` wins. Otherwise the id of the version object, a
+    ``versions`` or ``drafts`` row, or the resource ``id`` when ``version`` is
+    the semver that was just uploaded. That created-version object includes
+    the package slug, so a slug alone does not hide the id.
+    """
+    return _version_uuid_in(payload, semver, depth=0)
+
+
+def _version_uuid_in(node: Any, semver: str, depth: int) -> str | None:
+    if depth > 5 or not isinstance(node, dict):
+        return None
+    for key in _VERSION_ID_KEYS:
+        if _is_uuid(node.get(key)):
+            return str(node[key]).strip()
+    for key in _NESTED_VERSION_KEYS:
+        child = node.get(key)
+        if not isinstance(child, dict):
+            continue
+        found = _version_uuid_in(child, semver, depth + 1)
+        if found:
+            return found
+        if _is_uuid(child.get("id")):
+            return str(child["id"]).strip()
+    for key in _VERSION_ROW_KEYS:
+        found = _uuid_from_version_rows(node.get(key))
+        if found:
+            return found
+    # The created version's own id. Check it before wrapped copies so a nested
+    # agent summary cannot replace the version UUID on the response itself.
+    if _is_uuid(node.get("id")) and _is_pushed_version(node, semver):
+        return str(node["id"]).strip()
+    for key in _ENVELOPE_KEYS:
+        child = node.get(key)
+        if isinstance(child, dict):
+            found = _version_uuid_in(child, semver, depth + 1)
+            if found:
+                return found
     return None
+
+
+def _uuid_from_version_rows(rows: Any) -> str | None:
+    if isinstance(rows, dict):
+        rows = [rows]
+    if not isinstance(rows, list):
+        return None
+    chosen = _prefer([row for row in rows if isinstance(row, dict)])
+    if chosen is None:
+        return None
+    vid = chosen.get("version_id") or chosen.get("versionId") or chosen.get("id")
+    return str(vid).strip() if _is_uuid(vid) else None
+
+
+def _is_pushed_version(node: dict[str, Any], semver: str) -> bool:
+    """True when this object is the version that was just uploaded.
+
+    ``POST .../versions`` returns that version. Its ``id`` is the version UUID
+    and its ``version`` is the semver from spec.yaml. A slug on that object is
+    the package slug, not a sign that ``id`` belongs to the agent. An agent
+    summary whose semver does not match, and which has no state, is left alone.
+    """
+    version = node.get("version")
+    if not isinstance(version, str):
+        return False
+    if version.strip() == (semver or "").strip():
+        return True
+    has_state = bool(node.get("state") or node.get("status"))
+    if node.get("slug") and not has_state:
+        return False
+    return has_state
 
 
 def select_version_id(payload: Any, slug: str, *, semver: str | None = None) -> str | None:

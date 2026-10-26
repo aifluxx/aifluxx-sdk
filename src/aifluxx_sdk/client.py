@@ -1,4 +1,4 @@
-"""AIfluxx HTTP client."""
+"""AIFluxx HTTP client."""
 from __future__ import annotations
 
 import httpx
