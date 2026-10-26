@@ -192,7 +192,7 @@ def _redirect_message(res: httpx.Response) -> str:
     if location.startswith("http://"):
         message += " The Location URL is http, so the host is downgrading TLS."
     if "/mcp" in str(getattr(getattr(res, "request", None), "url", "")) or "/mcp" in location:
-        message += " For MCP, call https://api.aifluxx.co.za/mcp/ and do not follow the redirect to http."
+        message += " For MCP, use the https URL exactly as shown: https://api.aifluxx.co.za/mcp/"
     return message
 
 

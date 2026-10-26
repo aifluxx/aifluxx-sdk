@@ -46,5 +46,8 @@ a2a = ["a2a-sdk>=1.1,<2"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+aifluxx_sdk = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -101,6 +101,10 @@ aifluxx keys revoke <key-id>
 
 After a successful push the CLI writes `.aifluxx/agent.lock` in the package, including the version UUID. An older `.truest/agent.lock` is copied to `.aifluxx/agent.lock` the next time it is read. Neither directory is uploaded. New commands do not write `~/.truest` or `.truest/agent.lock`.
 
+## Getting a developer key
+
+Sign up for a developer account at https://developer.aifluxx.co.za/signup. For help or access questions, contact developer@aifluxx.com.
+
 ## API keys
 
 `aifluxx keys` calls the developer key API:
@@ -159,7 +163,7 @@ MCP clients talk to the host. This package does not embed an MCP server. Use the
 }
 ```
 
-`https://api.aifluxx.co.za/mcp` (no slash) currently returns 307 to `http://api.aifluxx.co.za/mcp/`, which drops TLS. That redirect is a host bug. The trailing-slash HTTPS URL avoids it. For the Truest profile use `https://api.truest.ae/mcp/`. Multi-business keys pass `business_id` the same way the Python client does.
+Use the HTTPS URL exactly as shown, including the trailing slash. For the Truest profile use `https://api.truest.ae/mcp/`. Multi-business keys pass `business_id` the same way the Python client does.
 
 ## Develop
 
