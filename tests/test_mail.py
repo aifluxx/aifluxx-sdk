@@ -43,7 +43,7 @@ def test_send_posts_json():
 
 def test_client_send_not_implemented_until_a2a():
     client = AifluxxClient("https://api.example", api_key="afx_live_test")
-    with pytest.raises(NotImplementedError, match="A2A"):
+    with pytest.raises(NotImplementedError, match="A2A chat is not available yet"):
         client.send("chief_of_staff", "hello", business_id="co")
     client.close()
 

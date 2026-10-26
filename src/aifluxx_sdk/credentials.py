@@ -92,7 +92,10 @@ def load_credentials(path: Path | None = None) -> Credentials:
         if legacy.is_file():
             _migrate(legacy, store)
     if not store.is_file():
-        raise AuthError("Not logged in. Run `aifluxx login` and paste the afx_dev_ key from Home.")
+        raise AuthError(
+            "Not logged in. Run `aifluxx login` and paste the afx_dev_ key from Home. "
+            "Sign up at https://developer.aifluxx.co.za/signup (accounts need approval)."
+        )
     try:
         data = json.loads(store.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:

@@ -6,31 +6,15 @@ Signup, docs, and the developer site stay on the AIfluxx host. This repository d
 
 ## Install
 
-This package is not on PyPI, and the GitHub repository is private. These commands fail today:
+Requires Python 3.11 or newer. The package is not on PyPI; install it from GitHub:
 
 ```bash
-pip install aifluxx
-pip install aifluxx-sdk
-pip install git+https://github.com/aifluxx/aifluxx-sdk.git
+python -m pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 ```
 
-`pip install aifluxx` looks up a different name and finds nothing. `pip install aifluxx-sdk` looks on PyPI, where this project has not been published. An unauthenticated `git+https` URL gets a 404 from GitHub because the repository is private.
+To pin a release, append a tag once one is published (none yet), for example `...aifluxx-sdk.git@v0.1.0`.
 
-Install from a checkout you can already read:
-
-```bash
-gh repo clone aifluxx/aifluxx-sdk
-cd aifluxx-sdk
-pip install -e .
-```
-
-If your SSH key can read `aifluxx/aifluxx-sdk`:
-
-```bash
-pip install "aifluxx-sdk @ git+ssh://git@github.com/aifluxx/aifluxx-sdk.git"
-```
-
-Publishing to PyPI, and making the repository public, are separate decisions. Neither is required to install from a clone. See `.github/workflows/publish.yml`.
+You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
 ## Log in
 
@@ -59,7 +43,7 @@ aifluxx login --platform truest
 
 Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. If `~/.aifluxx/credentials` is missing and `~/.truest/credentials` exists, the CLI moves that file into `~/.aifluxx/`, rewrites a retired host, and deletes `~/.truest/credentials`. The override for the path is `AIFLUXX_CREDENTIALS`. `TRUEST_CREDENTIALS` still works and prints a deprecation warning. The file stays on your machine. Do not commit it.
 
-`truest` still runs this program and prints a deprecation warning. Use `aifluxx`.
+The legacy `truest` command is a deprecated alias for `aifluxx` and prints a deprecation warning. Use `aifluxx`.
 
 ## Author a package
 
@@ -132,11 +116,11 @@ client.mail.send(
 )
 ```
 
-`TruestClient` still constructs the same client and emits a `DeprecationWarning`. Use `AifluxxClient`.
+`TruestClient` is a deprecated alias for `AifluxxClient` and emits a `DeprecationWarning`. Use `AifluxxClient`.
 
 `client.mail.mailboxes(business_id=…)` lists connected identities you may name as `from_`. `from_` is required and must match a connected mailbox (`imap_mail`, `gmail_mail`, or `ms_graph_mail`). Send is immediate. The key must be a company admin or delegate. Multi-business users pass `business_id`.
 
-`client.send(...)` talks to an agent over A2A at `/a2a`. It raises `NotImplementedError` until that route is available. Mail send does not use it.
+`client.send(...)` (A2A chat with an agent) is **coming soon / not yet available**. It currently raises `NotImplementedError`; use `aifluxx run` (or the developer runs API) to run an agent today. Mail send does not use it.
 
 Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_…` or `mcpat_…`) or a developer key from Home (`afx_dev_…`).
 
