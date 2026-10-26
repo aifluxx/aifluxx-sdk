@@ -12,14 +12,18 @@ from typing import Any
 
 READ_TOOLS = frozenset(
     {
-        "search_documents",
+        "search_company_knowledge",
         "get_document",
-        "ask_truest",  # host tool id; still the name the API allow-list publishes
         "list_mandate_tasks",
         "list_contacts",
         "list_businesses",
     }
 )
+
+# Former tool ids the host no longer publishes. validate names the replacement.
+TOOL_ALIASES = {
+    "search_documents": "search_company_knowledge",
+}
 
 WRITE_TOOLS = frozenset(
     {
@@ -58,7 +62,7 @@ CATEGORIES = frozenset(
     }
 )
 
-SCHEMAS = frozenset({"truest/agent/v1", "aifluxx/agent/v1"})
+SCHEMAS = frozenset({"aifluxx/agent/v1"})
 
 _TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _LIST_KEYS = (

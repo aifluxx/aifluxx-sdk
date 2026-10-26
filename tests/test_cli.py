@@ -1,19 +1,26 @@
 import json
-import sys
 from pathlib import Path
 
 import httpx
 import pytest
 from typer.testing import CliRunner
 
-from aifluxx_sdk.cli import _client, app, main
+from aifluxx_sdk.cli import _client, _verify_credentials, app
 from aifluxx_sdk.credentials import load_credentials
+from aifluxx_sdk.exceptions import AuthError
 
 runner = CliRunner()
 
 
 def _text(result) -> str:
     return result.output + (getattr(result, "stderr", None) or "")
+
+
+def _flat(text: str) -> str:
+    cleaned = text
+    for mark in ("│", "╭", "╮", "╰", "╯", "─"):
+        cleaned = cleaned.replace(mark, " ")
+    return " ".join(cleaned.split())
 
 
 @pytest.fixture
@@ -52,34 +59,57 @@ def test_login_writes_credentials(tmp_path: Path, monkeypatch, allow_login):
     assert creds.url == "https://api.example"
 
 
-def test_login_defaults_to_aifluxx(tmp_path: Path, monkeypatch, allow_login):
+def _http_factory(seen: list[str]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"org": {"name": "Acme"}})
+
+    real = httpx.Client
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    return factory
+
+
+def test_login_refuses_dev_key_on_prod_before_network(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    seen: list[str] = []
+    monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", _http_factory(seen))
     result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
-    assert result.exit_code == 0, result.output
-    assert load_credentials(store).url == "https://api.aifluxx.co.za"
-    assert "WARNING" in _text(result)
-    assert "production" in _text(result)
+    text = _text(result)
+    assert result.exit_code == 1, text
+    assert seen == []
+    assert "production" in text
+    assert "No request was sent" in text
+    assert "Saved" not in text
+    assert not store.exists()
+    explicit = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "aifluxx"])
+    assert explicit.exit_code == 1
+    assert seen == []
+    assert not store.exists()
 
 
-def test_login_platform_truest(tmp_path: Path, monkeypatch, allow_login):
+def test_verify_and_client_refuse_dev_key_on_prod_before_network(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
+    store.write_text(
+        '{"url": "https://api.aifluxx.co.za", "api_key": "afx_dev_k"}\n',
+        encoding="utf-8",
+    )
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
-    result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "truest"])
-    assert result.exit_code == 0, result.output
-    assert load_credentials(store).url == "https://api.truest.ae"
-    assert "truest.biz" not in result.output
-    assert "WARNING" in _text(result)
-
-
-def test_login_rewrites_retired_host(tmp_path: Path, monkeypatch, allow_login):
-    store = tmp_path / "credentials"
-    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
-    result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.truest.biz"])
-    assert result.exit_code == 0, result.output
-    assert "retired" in result.output
-    assert load_credentials(store).url == "https://api.aifluxx.co.za"
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    seen: list[str] = []
+    monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", _http_factory(seen))
+    with pytest.raises(AuthError, match="production"):
+        _verify_credentials("https://api.aifluxx.co.za", "afx_dev_k")
+    with pytest.raises(AuthError, match="production"):
+        _verify_credentials("https://developer.aifluxx.co.za", "afx_dev_k")
+    with pytest.raises(AuthError, match="No request was sent"):
+        _client()
+    assert seen == []
 
 
 def test_login_uses_env_url(tmp_path: Path, monkeypatch, allow_login):
@@ -101,15 +131,6 @@ def test_env_url_overrides_saved_credentials(tmp_path: Path, monkeypatch):
         assert client.url == "https://api.override"
     finally:
         client.close()
-
-
-def test_truest_entrypoint_warns(tmp_path: Path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["truest", "validate"])
-    with pytest.raises(SystemExit) as exc:
-        main()
-    assert exc.value.code == 1
-    assert "deprecated" in capsys.readouterr().err
 
 
 def test_keys_list_rotate_revoke(tmp_path: Path, monkeypatch):
@@ -213,21 +234,19 @@ def test_login_help_lists_dev_platform_and_stdin():
     assert result.exit_code == 0, text
     assert "--platform" in text
     assert "--api-key-stdin" in text
-    assert "dev.developer.aifluxx.co.za" in text
-    assert "dev.developer.truest.ae" in text
+    flat = _flat(text)
+    assert "dev.developer.aifluxx.co.za" in flat
+    assert "aifluxx (https://api.aifluxx.co.za)" in flat
 
 
-def test_login_platform_dev_and_truest_dev(tmp_path: Path, monkeypatch, allow_login):
+def test_login_platform_dev(tmp_path: Path, monkeypatch, allow_login):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     assert dev.exit_code == 0, dev.output
     assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
-    assert "WARNING" not in _text(dev)
-    truest_dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "truest-dev"])
-    assert truest_dev.exit_code == 0, truest_dev.output
-    assert load_credentials(store).url == "https://dev.developer.truest.ae"
-    assert "WARNING" not in _text(truest_dev)
+    assert "production" not in _text(dev)
+    assert "Saved" in _text(dev)
 
 
 def test_login_live_key_on_prod_does_not_warn(tmp_path: Path, monkeypatch, allow_login):
@@ -338,15 +357,20 @@ def test_init_list_and_missing_slug(tmp_path: Path, monkeypatch):
     listed = runner.invoke(app, ["init", "--list"])
     text = _text(listed)
     assert listed.exit_code == 0, text
-    assert "compliance" in text
+    assert "compliance [default]" in text
     assert "finance" in text
-    assert "search_documents" in text
+    assert "search_company_knowledge" in text
+    assert "search_documents" not in text
     assert "list_compliance_obligations" not in text
     assert "get_compliance_status" not in text
+    assert "alias: compliance-checklist" in text
     assert list(tmp_path.iterdir()) == []
     raw = runner.invoke(app, ["init", "--list", "--json"])
     payload = json.loads(raw.output)
     assert {row["template"] for row in payload} >= {"compliance", "standup"}
+    default = next(row for row in payload if row["default"])
+    assert default["template"] == "compliance"
+    assert default["aliases"] == ["compliance-checklist"]
     missing = runner.invoke(app, ["init", "--template", "finance"])
     usage = _text(missing)
     assert missing.exit_code == 1
@@ -362,7 +386,7 @@ def test_init_prompts_for_slug(tmp_path: Path, monkeypatch):
     assert result.exit_code == 0, result.output
     spec = (tmp_path / "prompted-agent" / "spec.yaml").read_text(encoding="utf-8")
     assert "slug: prompted-agent" in spec
-    assert "search_documents" in spec
+    assert "search_company_knowledge" in spec
 
 
 def test_validate_uses_host_catalogue(tmp_path: Path, monkeypatch):
@@ -374,7 +398,7 @@ def test_validate_uses_host_catalogue(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["validate", str(tmp_path / "my-agent")])
     text = _text(result)
     assert result.exit_code == 1
-    assert "search_documents" in text
+    assert "search_company_knowledge" in text
     assert "host tool catalogue" in text
 
 
@@ -426,19 +450,21 @@ def test_status_is_human_by_default_and_json_is_raw(tmp_path: Path, monkeypatch)
     assert '"draft"' in rooted.output
 
 
-def test_client_warns_when_saved_dev_key_targets_prod(tmp_path: Path, monkeypatch, capsys):
-    store = tmp_path / "credentials"
-    store.write_text(
-        '{"url": "https://api.aifluxx.co.za", "api_key": "afx_dev_k"}\n',
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
-    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
-    client = _client()
-    client.close()
-    err = capsys.readouterr().err
-    assert "WARNING" in err
-    assert "production" in err
+def test_init_help_default_is_the_listed_template():
+    help_text = _flat(_text(runner.invoke(app, ["init", "--help"])))
+    listed = _text(runner.invoke(app, ["init", "--list"]))
+    assert "[default: compliance]" in help_text
+    assert "compliance-checklist is an alias for compliance" in help_text
+    template_ids = []
+    alias_names = []
+    for line in listed.splitlines():
+        if line.startswith("  alias:"):
+            alias_names.append(line.split(":", 1)[1].strip())
+        elif line and not line.startswith(" "):
+            template_ids.append(line.split()[0])
+    assert "compliance" in template_ids
+    assert "compliance" not in alias_names
+    assert "compliance-checklist" in alias_names
 
 
 def test_help_lists_login_commands_still_present():

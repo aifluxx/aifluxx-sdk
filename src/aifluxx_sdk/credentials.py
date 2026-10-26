@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,49 +10,29 @@ from urllib.parse import urlparse
 from aifluxx_sdk.exceptions import AuthError
 
 DEFAULT_URL = "https://api.aifluxx.co.za"
-TRUEST_URL = "https://api.truest.ae"
-# ZA dev and Truest dev developer APIs. The dev portal calls /api/dev on its own origin.
+# ZA dev developer API. The dev portal calls /api/dev on its own origin.
 DEV_URL = "https://dev.developer.aifluxx.co.za"
-TRUEST_DEV_URL = "https://dev.developer.truest.ae"
-RETIRED_HOST = "api.truest.biz"
 
 PLATFORMS = {
     "aifluxx": DEFAULT_URL,
-    "truest": TRUEST_URL,
     "dev": DEV_URL,
-    "truest-dev": TRUEST_DEV_URL,
 }
 
-# Production API and developer-portal hosts. afx_dev_ keys issued on a dev
+# Production API and developer-portal hosts. afx_dev_ keys issued on the dev
 # portal do not belong on these.
 PROD_HOSTS = frozenset(
     {
         "api.aifluxx.co.za",
-        "api.truest.ae",
         "developer.aifluxx.co.za",
-        "developer.truest.ae",
     }
 )
 
-_LEGACY_DIR = ".truest"
 _CONFIG_DIR = ".aifluxx"
 
 
 def normalize_api_url(url: str) -> str:
-    """Return a canonical API root. `api.truest.biz` is rewritten to the AIfluxx default."""
-    cleaned = (url or "").strip().rstrip("/")
-    if not cleaned:
-        return cleaned
-    if "://" not in cleaned:
-        return cleaned
-    scheme, rest = cleaned.split("://", 1)
-    host, sep, tail = rest.partition("/")
-    hostname, colon, port = host.partition(":")
-    if hostname.lower() == RETIRED_HOST:
-        host = "api.aifluxx.co.za" + (colon + port if colon else "")
-        rest = host + (sep + tail if sep else "")
-        cleaned = f"{scheme}://{rest}"
-    return cleaned.rstrip("/")
+    """Return a canonical API root with no trailing slash."""
+    return (url or "").strip().rstrip("/")
 
 
 def is_prod_api_url(url: str) -> bool:
@@ -88,23 +66,11 @@ def credentials_path() -> Path:
     override = os.environ.get("AIFLUXX_CREDENTIALS", "").strip()
     if override:
         return Path(override)
-    legacy = os.environ.get("TRUEST_CREDENTIALS", "").strip()
-    if legacy:
-        warnings.warn(
-            "TRUEST_CREDENTIALS is deprecated and will be removed. Set AIFLUXX_CREDENTIALS.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return Path(legacy)
     return _default_store()
 
 
 def _default_store() -> Path:
     return Path.home() / _CONFIG_DIR / "credentials"
-
-
-def _legacy_store() -> Path:
-    return Path.home() / _LEGACY_DIR / "credentials"
 
 
 @dataclass(frozen=True)
@@ -115,10 +81,6 @@ class Credentials:
 
 def load_credentials(path: Path | None = None) -> Credentials:
     store = path or credentials_path()
-    if path is None and store == _default_store() and not store.is_file():
-        legacy = _legacy_store()
-        if legacy.is_file():
-            _migrate(legacy, store)
     if not store.is_file():
         raise AuthError(
             "Not logged in. Run `aifluxx login` and paste the afx_dev_ key from Home. "
@@ -152,28 +114,6 @@ def save_credentials(creds: Credentials, path: Path | None = None) -> Path:
     )
     _harden(store, directory=False)
     return store
-
-
-def _migrate(legacy: Path, dest: Path) -> None:
-    try:
-        data = json.loads(legacy.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise AuthError(f"Could not migrate {legacy} to {dest}.") from exc
-    if not isinstance(data, dict):
-        raise AuthError(f"Could not migrate {legacy} to {dest}.")
-    url = normalize_api_url(str(data.get("url") or ""))
-    api_key = str(data.get("api_key") or "").strip()
-    if not url or not api_key:
-        raise AuthError(f"Could not migrate {legacy}: missing url or api_key.")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    _harden(dest.parent, directory=True)
-    dest.write_text(json.dumps({"url": url, "api_key": api_key}, indent=2) + "\n", encoding="utf-8")
-    _harden(dest, directory=False)
-    try:
-        legacy.unlink()
-    except OSError as exc:
-        raise AuthError(f"Moved credentials to {dest} but could not remove {legacy}: {exc}.") from exc
-    print(f"Moved credentials from {legacy} to {dest}.", file=sys.stderr)
 
 
 def _harden(path: Path, *, directory: bool) -> None:

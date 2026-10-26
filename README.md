@@ -18,13 +18,16 @@ You need an approved developer account to get an API key. Sign up at https://dev
 
 ## Log in
 
-The default API root is `https://api.aifluxx.co.za`.
+The default API root is `https://api.aifluxx.co.za` (`--platform aifluxx`).
 
 ```bash
-aifluxx login --api-key afx_dev_…
+aifluxx login --platform dev --api-key afx_dev_…
+aifluxx login --api-key afx_live_…
 ```
 
 `login` calls `GET /api/dev/me` before it writes the credentials file. A rejected key or an unreachable host prints the error and does not say `Saved`.
+
+An `afx_dev_` key aimed at a production host (`api.aifluxx.co.za` or `developer.aifluxx.co.za`) is refused before any request, including the login check and later commands. Nothing is saved. Dev keys belong on `--platform dev`.
 
 Pipe a key with `--api-key-stdin`. That reads stdin directly, so `getpass` is not used and Python does not emit `GetPassWarning`:
 
@@ -35,8 +38,8 @@ printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --platform dev
 Override the host for this login with `--url`, or for every command in the current process with `AIFLUXX_API_URL`:
 
 ```bash
-aifluxx login --url https://api.aifluxx.co.za
-export AIFLUXX_API_URL=https://api.aifluxx.co.za
+aifluxx login --url https://api.aifluxx.co.za --api-key afx_live_…
+export AIFLUXX_API_URL=https://dev.developer.aifluxx.co.za
 ```
 
 `--url` wins over `--platform`, which wins over `AIFLUXX_API_URL`. When `AIFLUXX_API_URL` is set, later commands use it instead of the URL saved at login.
@@ -46,25 +49,16 @@ Named platforms:
 | `--platform` | API root |
 |---|---|
 | `aifluxx` | `https://api.aifluxx.co.za` |
-| `truest` | `https://api.truest.ae` |
 | `dev` | `https://dev.developer.aifluxx.co.za` |
-| `truest-dev` | `https://dev.developer.truest.ae` |
 
-`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `truest-dev` is the Truest dev developer API. Production stays `aifluxx` and `truest`.
+`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `aifluxx` is production. Any other host is a custom `--url`.
 
 ```bash
 aifluxx login --platform dev
-aifluxx login --platform truest
-aifluxx login --platform truest-dev
+aifluxx login --platform aifluxx --api-key afx_live_…
 ```
 
-An `afx_dev_` key aimed at a production host (`api.aifluxx.co.za`, `api.truest.ae`, `developer.aifluxx.co.za`, or `developer.truest.ae`) prints a red `WARNING` on stderr. Login still verifies the key. Dev keys belong on `--platform dev` or `--platform truest-dev`.
-
-`https://api.truest.biz` is retired. The CLI rewrites it to `https://api.aifluxx.co.za`. It is not a profile and it is not the default. `--platform truest` is what selects `https://api.truest.ae`.
-
-Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. If `~/.aifluxx/credentials` is missing and `~/.truest/credentials` exists, the CLI moves that file into `~/.aifluxx/`, rewrites a retired host, and deletes `~/.truest/credentials`. The override for the path is `AIFLUXX_CREDENTIALS`. `TRUEST_CREDENTIALS` still works and prints a deprecation warning. The file stays on your machine. Do not commit it.
-
-The legacy `truest` command is a deprecated alias for `aifluxx` and prints a deprecation warning. Use `aifluxx`.
+Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. The override for the path is `AIFLUXX_CREDENTIALS`. The file stays on your machine. Do not commit it.
 
 ## Author a package
 
@@ -78,7 +72,7 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default `compliance` starter declares `search_documents` and `get_document` only. New packages use schema `aifluxx/agent/v1`. `truest/agent/v1` still validates.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. `compliance-checklist` is an alias for that same starter. Every starter declares `search_company_knowledge` (the id `GET /api/dev/tools` publishes). `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
 
@@ -90,7 +84,7 @@ aifluxx submit
 |---|---|
 | Method and path | `POST /api/dev/agents/{slug}/versions` |
 | Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
-| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` and `.truest` are left out. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` is left out. |
 | Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
@@ -109,7 +103,7 @@ aifluxx keys rotate <key-id>
 aifluxx keys revoke <key-id>
 ```
 
-After a successful push the CLI writes `.aifluxx/agent.lock` in the package, including the version UUID. An older `.truest/agent.lock` is copied to `.aifluxx/agent.lock` the next time it is read. Neither directory is uploaded. New commands do not write `~/.truest` or `.truest/agent.lock`.
+After a successful push the CLI writes `.aifluxx/agent.lock` in the package, including the version UUID. That directory is not uploaded.
 
 ## Getting a developer key
 
@@ -142,8 +136,6 @@ client.mail.send(
 )
 ```
 
-`TruestClient` is a deprecated alias for `AifluxxClient` and emits a `DeprecationWarning`. Use `AifluxxClient`.
-
 `client.mail.mailboxes(business_id=…)` lists connected identities you may name as `from_`. `from_` is required and must match a connected mailbox (`imap_mail`, `gmail_mail`, or `ms_graph_mail`). Send is immediate. The key must be a company admin or delegate. Multi-business users pass `business_id`.
 
 `client.send(...)` (A2A chat with an agent) is **coming soon / not yet available**. It currently raises `NotImplementedError`; use `aifluxx run` (or the developer runs API) to run an agent today. Mail send does not use it.
@@ -173,7 +165,7 @@ MCP clients talk to the host. This package does not embed an MCP server. Use the
 }
 ```
 
-Use the HTTPS URL exactly as shown, including the trailing slash. For the Truest profile use `https://api.truest.ae/mcp/`. Multi-business keys pass `business_id` the same way the Python client does.
+Use the HTTPS URL exactly as shown, including the trailing slash. Multi-business keys pass `business_id` the same way the Python client does.
 
 ## Develop
 

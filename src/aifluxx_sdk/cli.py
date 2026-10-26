@@ -1,4 +1,4 @@
-"""`aifluxx` CLI. `truest` is a deprecated console-script alias."""
+"""`aifluxx` CLI."""
 from __future__ import annotations
 
 import json
@@ -23,7 +23,14 @@ from aifluxx_sdk.credentials import (
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.package import validate_package
-from aifluxx_sdk.templates import TEMPLATES, get_template, render_spec, slug_to_name
+from aifluxx_sdk.templates import (
+    DEFAULT_TEMPLATE,
+    get_template,
+    render_spec,
+    slug_to_name,
+    template_option_help,
+    template_rows,
+)
 
 _SECRET_FIELDS = ("api_key", "key", "secret", "token")
 _STATE_LABELS = {
@@ -45,12 +52,11 @@ _STATE_KEYS = {"state", "status"}
 
 
 def _prog() -> str:
-    stem = Path(sys.argv[0]).name.split(".")[0].lower()
-    return stem if stem in {"aifluxx", "truest"} else "aifluxx"
+    return "aifluxx"
 
 
 def _platform_help() -> str:
-    ordered = ("aifluxx", "truest", "dev", "truest-dev")
+    ordered = ("aifluxx", "dev")
     bits = [f"{name} ({PLATFORMS[name]})" for name in ordered]
     return "Named host: " + "; ".join(bits) + "."
 
@@ -85,20 +91,18 @@ def _client() -> AifluxxClient:
     creds = load_credentials()
     override = os.environ.get("AIFLUXX_API_URL", "").strip()
     url = normalize_api_url(override) if override else creds.url
-    _warn_dev_key(creds.api_key, url)
+    _refuse_dev_key(creds.api_key, url)
     return AifluxxClient(url, api_key=creds.api_key)
 
 
-def _warn_dev_key(api_key: str, url: str) -> None:
+def _refuse_dev_key(api_key: str, url: str) -> None:
+    """Stop before any HTTP call when an afx_dev_ key targets production."""
     if not dev_key_on_prod_host(api_key, url):
         return
-    typer.secho(
-        f"WARNING: this afx_dev_ key is pointed at a production host ({url}).\n"
-        "Dev keys belong on the dev platform. Log in again with --platform dev "
-        f"({PLATFORMS['dev']}) or --platform truest-dev ({PLATFORMS['truest-dev']}).",
-        err=True,
-        fg="red",
-        bold=True,
+    raise AuthError(
+        f"Refusing to use an afx_dev_ key against a production host ({url}). "
+        f"Dev keys belong on --platform dev ({PLATFORMS['dev']}). "
+        "No request was sent."
     )
 
 
@@ -285,14 +289,6 @@ def _emit(payload: object, *, as_json: bool) -> None:
     typer.echo(_human(payload))
 
 
-def _retired_host_in_selection(url: str | None, platform: str | None) -> bool:
-    if url is not None and url.strip():
-        return "api.truest.biz" in url
-    if platform is not None and platform.strip():
-        return False
-    return "api.truest.biz" in os.environ.get("AIFLUXX_API_URL", "")
-
-
 def _new_secret(payload: object) -> str | None:
     if not isinstance(payload, dict):
         return None
@@ -349,6 +345,7 @@ def _account_label(payload: object) -> str | None:
 
 
 def _verify_credentials(url: str, api_key: str) -> dict[str, Any]:
+    _refuse_dev_key(api_key, url)
     with AifluxxClient(url, api_key=api_key) as client:
         payload = client.dev.me()
     return payload if isinstance(payload, dict) else {}
@@ -362,7 +359,7 @@ def _host_read_tools() -> frozenset[str] | None:
         return None
     override = os.environ.get("AIFLUXX_API_URL", "").strip()
     url = normalize_api_url(override) if override else creds.url
-    _warn_dev_key(creds.api_key, url)
+    _refuse_dev_key(creds.api_key, url)
     try:
         with AifluxxClient(url, api_key=creds.api_key) as client:
             names = client.dev.read_tool_names()
@@ -434,14 +431,9 @@ def login(
         typer.secho("Keys from Home start with afx_dev_. Subscriber keys start with afx_live_.", fg="yellow")
     try:
         resolved = resolve_api_url(url=url, platform=platform)
+        _refuse_dev_key(key, resolved)
     except AifluxxError as exc:
         _die(exc)
-    if _retired_host_in_selection(url, platform):
-        typer.secho(
-            f"api.truest.biz is retired. Using {resolved}. For the Truest profile, pass --platform truest.",
-            fg="yellow",
-        )
-    _warn_dev_key(key, resolved)
     try:
         identity = _verify_credentials(resolved, key)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
@@ -463,33 +455,27 @@ def init_cmd(
         None,
         help="Package folder name, kebab-case. Prompted when omitted in a terminal.",
     ),
-    template: str = typer.Option("compliance", "--template", "-t", help="Starter: " + ", ".join(sorted(TEMPLATES))),
+    template: str = typer.Option(DEFAULT_TEMPLATE, "--template", "-t", help=template_option_help()),
     dest: Path | None = typer.Option(None, "--dest", help="Parent folder. Defaults to the current directory."),
     list_templates: bool = typer.Option(False, "--list", help="List starter templates and do not write a package."),
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
     if list_templates:
-        rows = [
-            {
-                "template": name,
-                "title": chosen.name,
-                "category": chosen.category,
-                "description": chosen.description.strip(),
-                "tools": list(chosen.tools),
-            }
-            for name, chosen in ((key, TEMPLATES[key]) for key in sorted(TEMPLATES))
-        ]
+        rows = template_rows()
         if _as_json(ctx, json_output):
             typer.echo(_pretty(rows))
             return
         for row in rows:
             tools = ", ".join(row["tools"])
-            typer.echo(f"{row['template']}  {row['title']}  ({row['category']})")
+            label = row["template"]
+            if row["default"]:
+                label = f"{label} [default]"
+            typer.echo(f"{label}  {row['title']}  ({row['category']})")
             typer.echo(f"  {row['description']}")
             typer.echo(f"  tools: {tools}")
-            if row["template"] == "compliance":
-                typer.echo("  alias: compliance-checklist")
+            for alias in row["aliases"]:
+                typer.echo(f"  alias: {alias}")
         return
     try:
         chosen = get_template(template)
@@ -727,12 +713,6 @@ def keys_revoke(
 
 
 def main() -> None:
-    if _prog() == "truest":
-        typer.secho(
-            "The truest command is deprecated and will be removed. Use aifluxx.",
-            err=True,
-            fg="yellow",
-        )
     app()
 
 

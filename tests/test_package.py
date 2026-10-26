@@ -19,14 +19,14 @@ def test_valid_template_package(tmp_path: Path):
     assert report.spec["slug"] == "uae-board-pack-assistant"
     assert report.spec["schema"] == "aifluxx/agent/v1"
     tools = report.spec["tools"]
-    assert tools == ["search_documents", "get_document"]
+    assert tools == ["search_company_knowledge", "get_document"]
     assert "list_compliance_obligations" not in tools
     assert "get_compliance_status" not in tools
 
 
 def test_host_catalogue_rejects_tools_outside_it(tmp_path: Path):
     report = validate_package(_write_ok(tmp_path), read_tools=frozenset({"get_document"}))
-    assert any(row.code == "unknown_tool" and "search_documents" in row.note for row in report.errors)
+    assert any(row.code == "unknown_tool" and "search_company_knowledge" in row.note for row in report.errors)
     assert any("host tool catalogue" in row.note for row in report.errors)
 
 
@@ -62,6 +62,44 @@ def test_secret_in_package(tmp_path: Path):
     assert any(row.code == "secret_in_package" for row in report.errors)
 
 
+def test_known_tool_alias_suggests_replacement(tmp_path: Path):
+    pkg = _write_ok(tmp_path)
+    spec = (pkg / "spec.yaml").read_text(encoding="utf-8")
+    (pkg / "spec.yaml").write_text(spec.replace("search_company_knowledge", "search_documents"), encoding="utf-8")
+    report = validate_package(pkg)
+    assert not report.ok
+    notes = " ".join(row.note for row in report.findings if row.code == "unknown_tool")
+    assert "search_documents" in notes
+    assert "search_company_knowledge" in notes
+    host = validate_package(
+        pkg,
+        read_tools=frozenset({"search_company_knowledge", "get_document", "list_mandate_tasks", "list_contacts"}),
+    )
+    host_notes = " ".join(row.note for row in host.findings if row.code == "unknown_tool")
+    assert "Use search_company_knowledge" in host_notes
+
+
+def test_templates_pass_host_company_knowledge_catalogue(tmp_path: Path):
+    from aifluxx_sdk.templates import TEMPLATES
+
+    host = frozenset(
+        {
+            "search_company_knowledge",
+            "get_document",
+            "list_mandate_tasks",
+            "list_contacts",
+            "list_businesses",
+        }
+    )
+    for name, template in TEMPLATES.items():
+        pkg = tmp_path / name
+        pkg.mkdir()
+        (pkg / "spec.yaml").write_text(render_spec(name, template), encoding="utf-8")
+        (pkg / "instructions.md").write_text(template.instructions, encoding="utf-8")
+        report = validate_package(pkg, read_tools=host)
+        assert report.ok, (name, [row.note for row in report.errors])
+
+
 def test_nested_subagent(tmp_path: Path):
     pkg = _write_ok(tmp_path)
     spec = (pkg / "spec.yaml").read_text(encoding="utf-8")
@@ -69,7 +107,7 @@ def test_nested_subagent(tmp_path: Path):
     child = pkg / "subagents" / "checker"
     child.mkdir(parents=True)
     (child / "spec.yaml").write_text(
-        "schema: truest/agent/v1\nname: Checker\ntrigger:\n  type: chat\n",
+        "schema: aifluxx/agent/v1\nname: Checker\ntrigger:\n  type: chat\n",
         encoding="utf-8",
     )
     (child / "instructions.md").write_text("Check citations.\n", encoding="utf-8")

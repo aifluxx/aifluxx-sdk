@@ -36,8 +36,6 @@ Changelog = "https://github.com/aifluxx/aifluxx-sdk/releases"
 
 [project.scripts]
 aifluxx = "aifluxx_sdk.cli:main"
-# Deprecated console script. Prints a warning, then runs the aifluxx CLI.
-truest = "aifluxx_sdk.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0,<9", "build>=1.2", "twine>=6"]
