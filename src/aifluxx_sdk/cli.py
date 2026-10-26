@@ -418,6 +418,20 @@ def currency_for_account(account: object | None) -> str:
     return "USD"
 
 
+def _scaffold_api_url() -> str | None:
+    """API root already chosen for this machine, without calling the host.
+
+    ``AIFLUXX_API_URL`` wins, then the saved login URL. None when neither is set.
+    """
+    override = os.environ.get("AIFLUXX_API_URL", "").strip()
+    if override:
+        return normalize_api_url(override)
+    try:
+        return load_credentials().url
+    except AuthError:
+        return None
+
+
 def _account_for_scaffold() -> dict[str, Any] | None:
     """Logged-in ``GET /api/dev/me`` payload, or None when init cannot read it."""
     try:
@@ -573,8 +587,9 @@ def init_cmd(
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
+    api_url = _scaffold_api_url()
     if list_templates:
-        rows = template_rows()
+        rows = template_rows(api_url=api_url)
         if _as_json(ctx, json_output):
             typer.echo(_pretty(rows))
             return
@@ -599,7 +614,10 @@ def init_cmd(
         _die(AifluxxError(f"{root} already exists and is not empty."))
     root.mkdir(parents=True, exist_ok=True)
     currency = currency_for_account(_account_for_scaffold())
-    (root / "spec.yaml").write_text(render_spec(folder, chosen, currency=currency), encoding="utf-8")
+    (root / "spec.yaml").write_text(
+        render_spec(folder, chosen, currency=currency, api_url=api_url),
+        encoding="utf-8",
+    )
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(folder)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
