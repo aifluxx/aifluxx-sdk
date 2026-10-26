@@ -133,3 +133,11 @@ def test_lock_reads_legacy_and_writes_aifluxx(tmp_path: Path):
     save_lock(tmp_path, AgentLock(id="1", slug="board-pack", last_pushed_version="0.2.0"))
     assert json.loads((tmp_path / ".aifluxx" / "agent.lock").read_text(encoding="utf-8"))["last_pushed_version"] == "0.2.0"
     assert load_lock(tmp_path).last_pushed_version == "0.2.0"
+
+
+def test_not_logged_in_points_to_signup(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing" / "credentials"))
+    monkeypatch.delenv("TRUEST_CREDENTIALS", raising=False)
+    with pytest.raises(AuthError, match=r"Not logged in.*developer\.aifluxx\.co\.za/signup \(accounts need approval\)"):
+        load_credentials()

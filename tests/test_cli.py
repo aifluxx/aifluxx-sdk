@@ -183,3 +183,9 @@ def test_validate_without_package(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["validate"])
     assert result.exit_code == 1
     assert "spec.yaml" in result.output
+
+
+def test_help_lists_login():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0, result.output
+    assert "login" in result.output

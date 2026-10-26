@@ -47,7 +47,8 @@ class AifluxxClient:
         stream: bool = False,
     ):
         raise NotImplementedError(
-            "client.send() talks A2A at /a2a. Use client.mail.send() for connected-mailbox mail."
+            "A2A chat is not available yet; use runs via `aifluxx run` (developer runs API) "
+            "to run an agent. Use client.mail.send() for connected-mailbox mail."
         )
 
 
