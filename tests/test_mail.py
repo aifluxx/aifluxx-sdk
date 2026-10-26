@@ -30,7 +30,7 @@ def test_send_posts_json():
     http.post.return_value = _Res(200, {"ok": True})
     mail = MailClient(http, "https://api.example")
     mail.send(
-        from_="pinnacle@palmerclan.us",
+        from_="agent@example.com",
         to="x@y.z",
         subject="Hi",
         body="Body",
@@ -38,7 +38,7 @@ def test_send_posts_json():
     )
     args, kwargs = http.post.call_args
     assert args[0].endswith("/api/companies/co-1/mail/send")
-    assert kwargs["json"]["from"] == "pinnacle@palmerclan.us"
+    assert kwargs["json"]["from"] == "agent@example.com"
 
 
 def test_client_send_not_implemented_until_a2a():
