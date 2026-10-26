@@ -29,6 +29,47 @@ class _Res:
         return self._payload
 
 
+def test_tools_catalogue_and_push_uses_it(tmp_path: Path):
+    http = MagicMock()
+    http.get.return_value = _Res(200, {"tools": [{"name": "search_documents", "kind": "read"}, {"name": "get_document"}]})
+    client = DevClient(http, "https://api.example")
+    assert client.read_tool_names() == frozenset({"search_documents", "get_document"})
+    http.get.assert_called_with("https://api.example/api/dev/tools")
+
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    spec = render_spec("agent", template).replace("tools:\n", "tools:\n  - list_compliance_obligations\n", 1)
+    (package / "spec.yaml").write_text(spec, encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http.post.return_value = _Res(200, {"id": _VERSION, "version": "0.1.0", "state": "draft"})
+    with pytest.raises(AifluxxError, match="unknown_tool"):
+        client.push(package)
+    http.post.assert_not_called()
+
+
+def test_push_accepts_host_tool_absent_from_bundle(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("qa-over-documents")
+    spec = render_spec("agent", template).replace("search_documents", "list_open_filings")
+    (package / "spec.yaml").write_text(spec, encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http = MagicMock()
+    http.get.return_value = _Res(200, ["list_open_filings", "get_document"])
+    http.post.return_value = _Res(200, {"id": _VERSION, "version": "0.1.0", "state": "draft"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    http.post.assert_called_once()
+
+
+def test_missing_tools_route_falls_back(tmp_path: Path):
+    http = MagicMock()
+    http.get.return_value = _Res(404, {"detail": "Not Found"})
+    client = DevClient(http, "https://api.example")
+    assert client.read_tool_names() is None
+
+
 def test_missing_host_is_host_unavailable():
     http = MagicMock()
     http.get.return_value = _Res(404, {"detail": "Not Found"})

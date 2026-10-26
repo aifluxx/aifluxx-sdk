@@ -22,8 +22,8 @@ TEMPLATES: dict[str, Template] = {
         slug="compliance-checklist",
         name="Compliance checklist",
         category="compliance",
-        description="List open obligations and missing evidence for a jurisdiction the caller can already see.",
-        tools=("list_compliance_obligations", "get_compliance_status", "search_documents", "get_document"),
+        description="List open obligations and missing evidence from documents the caller can already see.",
+        tools=("search_documents", "get_document"),
         knowledge=(),
         instructions=(
             "You are a compliance officer for [[company_name]]. Today is [[today]].\n"

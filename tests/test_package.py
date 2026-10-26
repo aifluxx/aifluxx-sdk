@@ -18,6 +18,16 @@ def test_valid_template_package(tmp_path: Path):
     assert report.ok
     assert report.spec["slug"] == "uae-board-pack-assistant"
     assert report.spec["schema"] == "aifluxx/agent/v1"
+    tools = report.spec["tools"]
+    assert tools == ["search_documents", "get_document"]
+    assert "list_compliance_obligations" not in tools
+    assert "get_compliance_status" not in tools
+
+
+def test_host_catalogue_rejects_tools_outside_it(tmp_path: Path):
+    report = validate_package(_write_ok(tmp_path), read_tools=frozenset({"get_document"}))
+    assert any(row.code == "unknown_tool" and "search_documents" in row.note for row in report.errors)
+    assert any("host tool catalogue" in row.note for row in report.errors)
 
 
 def test_missing_instructions(tmp_path: Path):
