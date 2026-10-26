@@ -340,6 +340,63 @@ def test_run_reads_slug_from_package_or_argument(tmp_path: Path, monkeypatch):
     assert seen == {"slug": "other-agent", "prompt": "Hello there"}
 
 
+def _fake_run(lines: list[str]):
+    class _Dev:
+        def run(self, slug, prompt, *, version=None, lock=None):
+            yield from lines
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    return _Fake()
+
+
+def test_run_exits_nonzero_when_final_state_failed_or_errored(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(
+            [
+                '{"type":"text","delta":"partial"}',
+                '{"type":"done","state":"failed","error":"tool timed out"}',
+            ]
+        ),
+    )
+    failed = runner.invoke(app, ["run", "my-agent", "hello"])
+    failed_text = _text(failed)
+    assert failed.exit_code == 1, failed_text
+    assert "partial" in failed_text
+    assert "Failed: tool timed out" in failed_text
+
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(['data: {"status":"errored","error":{"message":"sandbox crashed"}}']),
+    )
+    errored = runner.invoke(app, ["run", "my-agent", "hello"])
+    errored_text = _text(errored)
+    assert errored.exit_code == 1, errored_text
+    assert "Errored: sandbox crashed" in errored_text
+
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(['{"state":"failed","error":"ignored"}', '{"type":"done","status":"completed"}']),
+    )
+    completed = runner.invoke(app, ["run", "my-agent", "hello"])
+    assert completed.exit_code == 0, completed.output
+    assert "Failed:" not in _text(completed)
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _fake_run(['{"state":"FAILED"}']))
+    bare = runner.invoke(app, ["run", "my-agent", "hello"])
+    assert bare.exit_code == 1
+    assert "Run failed." in _text(bare)
+
+
 def test_run_outside_package_requires_slug(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["run", "just a prompt"])

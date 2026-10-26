@@ -654,6 +654,80 @@ def _package_for_slug(path: Path | None, slug: str | None) -> Path | None:
     return cwd if spec_slug == slug else None
 
 
+_RUN_FAILURE_STATES = frozenset({"failed", "error", "errored"})
+
+
+def _json_event(line: str) -> dict[str, Any] | None:
+    text = line.strip()
+    if text.startswith("data:"):
+        text = text[5:].strip()
+    if not text or text == "[DONE]":
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _state_name(payload: dict[str, Any]) -> str | None:
+    for key in ("state", "status"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.replace("_", " ").replace("-", " ").split()).lower()
+    return None
+
+
+def _error_text(payload: dict[str, Any]) -> str | None:
+    for key in ("error", "detail", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = _error_text(value)
+            if nested:
+                return nested
+    return None
+
+
+def _outcome_from_payload(payload: dict[str, Any]) -> tuple[str, str | None] | None:
+    """Run state and error text from one stream object."""
+    state = _state_name(payload)
+    error = _error_text(payload)
+    if state is None:
+        for key in ("run", "result", "data"):
+            child = payload.get(key)
+            if isinstance(child, dict):
+                found = _outcome_from_payload(child)
+                if found is not None:
+                    nested_state, nested_error = found
+                    return nested_state, error or nested_error
+        kind = str(payload.get("type") or "").strip().lower().replace("-", " ").replace("_", " ")
+        if kind in _RUN_FAILURE_STATES:
+            state = kind
+    if state is None:
+        return None
+    return state, error
+
+
+def _run_line_outcome(line: str) -> tuple[str, str | None] | None:
+    """State and error from one stream line, or None when the line has no run state."""
+    payload = _json_event(line)
+    if payload is None:
+        return None
+    return _outcome_from_payload(payload)
+
+
+def _run_failure_message(state: str, error: str | None) -> str:
+    if state == "failed":
+        label, plain = "Failed", "Run failed."
+    else:
+        label, plain = "Errored", "Run errored."
+    if error:
+        return f"{label}: {error}"
+    return plain
+
+
 def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tuple[str, str, Path | None]:
     if len(parts) == 1:
         prompt = parts[0]
@@ -687,13 +761,22 @@ def run_cmd(
         help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
     ),
 ) -> None:
-    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt."""
+    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt.
+
+    Exits 1 when the stream's final state is failed or errored.
+    """
     try:
         package_slug, prompt, package = _run_target(parts, slug, path)
         lock = load_lock(package) if package is not None else None
+        outcome: tuple[str, str | None] | None = None
         with _client() as client:
             for line in client.dev.run(package_slug, prompt, version=version, lock=lock):
                 typer.echo(line)
+                parsed = _run_line_outcome(line)
+                if parsed is not None:
+                    outcome = parsed
+        if outcome is not None and outcome[0] in _RUN_FAILURE_STATES:
+            _die(AifluxxError(_run_failure_message(outcome[0], outcome[1])))
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
 
