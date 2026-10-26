@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from aifluxx_sdk.client import AifluxxClient, TruestClient
+from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.exceptions import (
     AifluxxError,
     AuthError,
@@ -20,7 +20,6 @@ except PackageNotFoundError:
 
 __all__ = [
     "AifluxxClient",
-    "TruestClient",
     "AifluxxError",
     "AuthError",
     "BusinessRequired",

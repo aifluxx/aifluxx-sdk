@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from aifluxx_sdk.dev import DevClient, _tarball
+from aifluxx_sdk.package import LOCAL_META_DIRS
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.templates import get_template, render_spec
@@ -31,9 +32,12 @@ class _Res:
 
 def test_tools_catalogue_and_push_uses_it(tmp_path: Path):
     http = MagicMock()
-    http.get.return_value = _Res(200, {"tools": [{"name": "search_documents", "kind": "read"}, {"name": "get_document"}]})
+    http.get.return_value = _Res(
+        200,
+        {"tools": [{"name": "search_company_knowledge", "kind": "read"}, {"name": "get_document"}]},
+    )
     client = DevClient(http, "https://api.example")
-    assert client.read_tool_names() == frozenset({"search_documents", "get_document"})
+    assert client.read_tool_names() == frozenset({"search_company_knowledge", "get_document"})
     http.get.assert_called_with("https://api.example/api/dev/tools")
 
     package = tmp_path / "agent"
@@ -52,7 +56,7 @@ def test_push_accepts_host_tool_absent_from_bundle(tmp_path: Path):
     package = tmp_path / "agent"
     package.mkdir()
     template = get_template("qa-over-documents")
-    spec = render_spec("agent", template).replace("search_documents", "list_open_filings")
+    spec = render_spec("agent", template).replace("search_company_knowledge", "list_open_filings")
     (package / "spec.yaml").write_text(spec, encoding="utf-8")
     (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
     http = MagicMock()
@@ -143,10 +147,25 @@ def test_push_stores_version_uuid(tmp_path: Path):
     assert lock is not None
     assert lock.version_id == _VERSION
     assert (package / ".aifluxx" / "agent.lock").is_file()
-    assert not (package / ".truest").exists()
     _assert_push_upload(http.post.call_args_list[0], "agent")
     client.submit("agent", lock=lock)
     assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def test_push_version_id_stays_empty_without_a_version_uuid(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    (package / "spec.yaml").write_text(render_spec("agent", template), encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http = MagicMock()
+    http.post.return_value = _Res(200, {"id": "agent-1", "slug": "agent", "version": "0.1.0"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    lock = load_lock(package)
+    assert lock is not None
+    assert lock.last_pushed_version == "0.1.0"
+    assert lock.version_id is None
 
 
 def _assert_push_upload(call, slug: str) -> None:
@@ -162,7 +181,7 @@ def _assert_push_upload(call, slug: str) -> None:
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
         names = tar.getnames()
     assert "spec.yaml" in names
-    assert all(".aifluxx" not in Path(name).parts and ".truest" not in Path(name).parts for name in names)
+    assert all(".aifluxx" not in Path(name).parts for name in names)
 
     meta_filename, meta_bytes, meta_type = files["metadata"]
     assert meta_filename is None
@@ -327,7 +346,8 @@ def test_tarball_skips_local_meta(tmp_path: Path):
     package = tmp_path / "pkg"
     package.mkdir()
     (package / "spec.yaml").write_text("schema: aifluxx/agent/v1\n", encoding="utf-8")
-    for name in (".aifluxx", ".truest"):
+    assert len(LOCAL_META_DIRS) >= 2
+    for name in LOCAL_META_DIRS:
         folder = package / name
         folder.mkdir()
         (folder / "agent.lock").write_text("{}\n", encoding="utf-8")

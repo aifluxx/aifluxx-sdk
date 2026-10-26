@@ -1,8 +1,6 @@
 """AIfluxx HTTP client."""
 from __future__ import annotations
 
-import warnings
-
 import httpx
 
 from aifluxx_sdk.dev import DevClient
@@ -50,15 +48,3 @@ class AifluxxClient:
             "A2A chat is not available yet; use runs via `aifluxx run` (developer runs API) "
             "to run an agent. Use client.mail.send() for connected-mailbox mail."
         )
-
-
-class TruestClient(AifluxxClient):
-    """Deprecated alias for :class:`AifluxxClient`."""
-
-    def __init__(self, url: str, *, api_key: str, timeout: float = 60.0) -> None:
-        warnings.warn(
-            "TruestClient is deprecated and will be removed. Use AifluxxClient.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(url, api_key=api_key, timeout=timeout)

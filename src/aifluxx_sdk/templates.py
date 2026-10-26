@@ -23,7 +23,7 @@ TEMPLATES: dict[str, Template] = {
         name="Compliance checklist",
         category="compliance",
         description="List open obligations and missing evidence from documents the caller can already see.",
-        tools=("search_documents", "get_document"),
+        tools=("search_company_knowledge", "get_document"),
         knowledge=(),
         instructions=(
             "You are a compliance officer for [[company_name]]. Today is [[today]].\n"
@@ -36,7 +36,7 @@ TEMPLATES: dict[str, Template] = {
         name="Finance summariser",
         category="finance",
         description="Period movements in plain language, with a citation on every number you quote.",
-        tools=("search_documents", "get_document", "ask_truest"),
+        tools=("search_company_knowledge", "get_document"),
         knowledge=(),
         instructions=(
             "Summarise the period for [[user_name]] at [[company_name]]. "
@@ -48,7 +48,7 @@ TEMPLATES: dict[str, Template] = {
         name="Q&A over documents",
         category="general",
         description="Answer questions from named connectors. Read only. No write tools.",
-        tools=("search_documents", "get_document"),
+        tools=("search_company_knowledge", "get_document"),
         knowledge=("gmail_mail", "sharepoint", "google_drive"),
         instructions=(
             "Answer from documents [[user_name]] can already open. "
@@ -60,7 +60,7 @@ TEMPLATES: dict[str, Template] = {
         name="Engineering standup",
         category="engineering",
         description="Yesterday, today, and blockers from tasks and mail the user can already see.",
-        tools=("list_mandate_tasks", "search_documents", "get_document"),
+        tools=("list_mandate_tasks", "search_company_knowledge", "get_document"),
         knowledge=(),
         instructions=(
             "Write a standup for [[user_name]] on [[today]]: yesterday, today, blockers. "
@@ -72,7 +72,7 @@ TEMPLATES: dict[str, Template] = {
         name="Account snapshot",
         category="sales",
         description="One-page account brief from CRM notes and vault files the caller can already see.",
-        tools=("list_contacts", "search_documents", "get_document"),
+        tools=("list_contacts", "search_company_knowledge", "get_document"),
         knowledge=(),
         instructions=(
             "Write a one-page account brief for [[company_name]]. "
@@ -82,12 +82,52 @@ TEMPLATES: dict[str, Template] = {
 }
 
 
+# Public starter id. `init --help` and `init --list` both use this string.
+DEFAULT_TEMPLATE = "compliance"
+
+# Extra names that select a starter. The public id stays the dict key above.
+TEMPLATE_ALIASES = {
+    "compliance-checklist": "compliance",
+}
+
+
+def template_aliases(name: str) -> tuple[str, ...]:
+    return tuple(sorted(alias for alias, target in TEMPLATE_ALIASES.items() if target == name))
+
+
+def template_option_help() -> str:
+    """Help text for `--template`. The default id is the same id `init --list` prints."""
+    names = ", ".join(sorted(TEMPLATES))
+    alias_text = " ".join(
+        f"{alias} is an alias for {target}." for alias, target in sorted(TEMPLATE_ALIASES.items())
+    )
+    return f"Starter name. Default: {DEFAULT_TEMPLATE}. Names: {names}. {alias_text}"
+
+
+def template_rows() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for name in sorted(TEMPLATES):
+        chosen = TEMPLATES[name]
+        rows.append(
+            {
+                "template": name,
+                "title": chosen.name,
+                "category": chosen.category,
+                "description": chosen.description.strip(),
+                "tools": list(chosen.tools),
+                "aliases": list(template_aliases(name)),
+                "default": name == DEFAULT_TEMPLATE,
+            }
+        )
+    return rows
+
+
 def get_template(name: str) -> Template:
     key = (name or "").strip().lower()
-    if key == "compliance-checklist":
-        key = "compliance"
+    key = TEMPLATE_ALIASES.get(key, key)
     if key not in TEMPLATES:
-        raise AifluxxError(f"Unknown template {name!r}. Use: {', '.join(sorted(TEMPLATES))}.")
+        known = ", ".join(sorted(TEMPLATES))
+        raise AifluxxError(f"Unknown template {name!r}. Use: {known}.")
     return TEMPLATES[key]
 
 

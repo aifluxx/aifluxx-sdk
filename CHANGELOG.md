@@ -1,0 +1,11 @@
+# Changelog
+
+## Unreleased
+
+### Breaking
+
+- The legacy agent schema id is no longer accepted. Packages must use `aifluxx/agent/v1`.
+- The legacy ask tool was removed and has no alias. Delete it from `tools`.
+- The legacy client class was removed. Construct `AifluxxClient`.
+- Legacy platform names were removed. Named hosts are `aifluxx` (`https://api.aifluxx.co.za`) and `dev` (`https://dev.developer.aifluxx.co.za`). Any other host is a custom `--url`.
+- The legacy credentials migration was removed. New logins do not read or move an older credentials file, and the old credentials environment variable is ignored. The store is `~/.aifluxx/credentials`, overridable with `AIFLUXX_CREDENTIALS`.

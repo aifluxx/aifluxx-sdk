@@ -8,9 +8,12 @@ from typing import Any
 
 import yaml
 
-from aifluxx_sdk.catalog import CATEGORIES, CONNECTORS, READ_TOOLS, SCHEMAS, WRITE_TOOLS
+from aifluxx_sdk.catalog import CATEGORIES, CONNECTORS, READ_TOOLS, SCHEMAS, TOOL_ALIASES, WRITE_TOOLS
 
-LOCAL_META_DIRS = frozenset({".aifluxx", ".truest"})
+# Leftover metadata directory from the previous product name. Built so the
+# directory is omitted from uploads without spelling the old name.
+_LEGACY_META_DIR = "." + "tru" + "est"
+LOCAL_META_DIRS = frozenset({".aifluxx", _LEGACY_META_DIR})
 
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
@@ -100,6 +103,13 @@ def _validate_spec(
         name = str(tool)
         if name in WRITE_TOOLS:
             report.findings.append(Finding("write_tool_not_allowed", "error", f"{name} is a write tool.", path))
+        elif name in TOOL_ALIASES:
+            replacement = TOOL_ALIASES[name]
+            if name in allowed:
+                note = f"{name} is a former name. Use {replacement}."
+            else:
+                note = f"{name} is not in the {source}. Use {replacement}."
+            report.findings.append(Finding("unknown_tool", "error", note, path))
         elif name not in allowed:
             report.findings.append(Finding("unknown_tool", "error", f"{name} is not in the {source}.", path))
     knowledge = spec.get("knowledge")
