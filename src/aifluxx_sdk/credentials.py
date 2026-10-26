@@ -7,17 +7,34 @@ import sys
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from aifluxx_sdk.exceptions import AuthError
 
 DEFAULT_URL = "https://api.aifluxx.co.za"
 TRUEST_URL = "https://api.truest.ae"
+# ZA dev and Truest dev developer APIs. The dev portal calls /api/dev on its own origin.
+DEV_URL = "https://dev.developer.aifluxx.co.za"
+TRUEST_DEV_URL = "https://dev.developer.truest.ae"
 RETIRED_HOST = "api.truest.biz"
 
 PLATFORMS = {
     "aifluxx": DEFAULT_URL,
     "truest": TRUEST_URL,
+    "dev": DEV_URL,
+    "truest-dev": TRUEST_DEV_URL,
 }
+
+# Production API and developer-portal hosts. afx_dev_ keys issued on a dev
+# portal do not belong on these.
+PROD_HOSTS = frozenset(
+    {
+        "api.aifluxx.co.za",
+        "api.truest.ae",
+        "developer.aifluxx.co.za",
+        "developer.truest.ae",
+    }
+)
 
 _LEGACY_DIR = ".truest"
 _CONFIG_DIR = ".aifluxx"
@@ -38,6 +55,17 @@ def normalize_api_url(url: str) -> str:
         rest = host + (sep + tail if sep else "")
         cleaned = f"{scheme}://{rest}"
     return cleaned.rstrip("/")
+
+
+def is_prod_api_url(url: str) -> bool:
+    """True when ``url`` is a production API or developer-portal host."""
+    host = (urlparse(url or "").hostname or "").lower()
+    return host in PROD_HOSTS
+
+
+def dev_key_on_prod_host(api_key: str, url: str) -> bool:
+    """True when an ``afx_dev_`` key is aimed at a production host."""
+    return (api_key or "").startswith("afx_dev_") and is_prod_api_url(url)
 
 
 def resolve_api_url(*, url: str | None = None, platform: str | None = None) -> str:

@@ -65,7 +65,14 @@ def _scan_secrets(root: Path, report: Report) -> None:
                 break
 
 
-def _validate_spec(spec: dict[str, Any], *, path: str, report: Report, subagent: bool) -> None:
+def _validate_spec(
+    spec: dict[str, Any],
+    *,
+    path: str,
+    report: Report,
+    subagent: bool,
+    read_tools: frozenset[str] | None = None,
+) -> None:
     schema = str(spec.get("schema") or "")
     if schema not in SCHEMAS:
         report.findings.append(Finding("schema_unsupported", "error", f"schema must be one of {sorted(SCHEMAS)}.", path))
@@ -87,12 +94,14 @@ def _validate_spec(spec: dict[str, Any], *, path: str, report: Report, subagent:
     if not isinstance(tools, list):
         report.findings.append(Finding("unknown_tool", "error", "tools must be a list of built-in names.", path))
         tools = []
+    allowed = READ_TOOLS if read_tools is None else read_tools
+    source = "built-in allow-list" if read_tools is None else "host tool catalogue"
     for tool in tools:
         name = str(tool)
         if name in WRITE_TOOLS:
             report.findings.append(Finding("write_tool_not_allowed", "error", f"{name} is a write tool.", path))
-        elif name not in READ_TOOLS:
-            report.findings.append(Finding("unknown_tool", "error", f"{name} is not in the built-in allow-list.", path))
+        elif name not in allowed:
+            report.findings.append(Finding("unknown_tool", "error", f"{name} is not in the {source}.", path))
     knowledge = spec.get("knowledge")
     if isinstance(knowledge, dict):
         for slug in knowledge.get("connectors") or []:
@@ -104,7 +113,7 @@ def _validate_spec(spec: dict[str, Any], *, path: str, report: Report, subagent:
         report.findings.append(Finding("nested_subagent", "error", "A subagent cannot declare subagents or trigger.", path))
 
 
-def validate_package(package_dir: Path) -> Report:
+def validate_package(package_dir: Path, *, read_tools: frozenset[str] | None = None) -> Report:
     root = package_dir.resolve()
     report = Report()
     spec_path = root / "spec.yaml"
@@ -116,7 +125,7 @@ def validate_package(package_dir: Path) -> Report:
     instructions = root / str(spec.get("instruction_file") or "instructions.md")
     if not instructions.is_file() or not instructions.read_text(encoding="utf-8").strip():
         report.findings.append(Finding("missing_instructions", "error", "instructions.md is absent or empty.", "instructions.md"))
-    _validate_spec(spec, path="spec.yaml", report=report, subagent=False)
+    _validate_spec(spec, path="spec.yaml", report=report, subagent=False, read_tools=read_tools)
     for rel in spec.get("subagents") or []:
         child = root / str(rel)
         child_spec = _read_yaml(child / "spec.yaml")
@@ -128,6 +137,6 @@ def validate_package(package_dir: Path) -> Report:
             report.findings.append(
                 Finding("missing_instructions", "error", "Subagent instructions.md is absent or empty.", f"{rel}/instructions.md")
             )
-        _validate_spec(child_spec, path=f"{rel}/spec.yaml", report=report, subagent=True)
+        _validate_spec(child_spec, path=f"{rel}/spec.yaml", report=report, subagent=True, read_tools=read_tools)
     _scan_secrets(root, report)
     return report

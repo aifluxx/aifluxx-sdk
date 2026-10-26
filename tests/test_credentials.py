@@ -5,9 +5,12 @@ import pytest
 
 from aifluxx_sdk.credentials import (
     DEFAULT_URL,
+    DEV_URL,
     PLATFORMS,
+    TRUEST_DEV_URL,
     Credentials,
     credentials_path,
+    dev_key_on_prod_host,
     load_credentials,
     resolve_api_url,
     save_credentials,
@@ -29,9 +32,18 @@ def test_platform_and_url_precedence(monkeypatch):
     monkeypatch.setenv("AIFLUXX_API_URL", "https://api.truest.biz")
     assert resolve_api_url() == "https://api.aifluxx.co.za"
     assert resolve_api_url(platform="truest") == "https://api.truest.ae"
+    assert resolve_api_url(platform="dev") == DEV_URL
+    assert resolve_api_url(platform="truest-dev") == TRUEST_DEV_URL
     assert resolve_api_url(url="https://api.example/root/", platform="truest") == "https://api.example/root"
     with pytest.raises(AuthError, match="Unknown platform"):
         resolve_api_url(platform="nope")
+    assert dev_key_on_prod_host("afx_dev_k", DEFAULT_URL)
+    assert dev_key_on_prod_host("afx_dev_k", "https://api.truest.ae")
+    assert dev_key_on_prod_host("afx_dev_k", "https://developer.aifluxx.co.za/api")
+    assert not dev_key_on_prod_host("afx_dev_k", DEV_URL)
+    assert not dev_key_on_prod_host("afx_dev_k", TRUEST_DEV_URL)
+    assert not dev_key_on_prod_host("afx_dev_k", "https://dev.aifluxx.co.za")
+    assert not dev_key_on_prod_host("afx_live_k", DEFAULT_URL)
 
 
 def test_default_store_is_aifluxx_home(tmp_path: Path, monkeypatch):

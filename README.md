@@ -24,6 +24,14 @@ The default API root is `https://api.aifluxx.co.za`.
 aifluxx login --api-key afx_dev_…
 ```
 
+`login` calls `GET /api/dev/me` before it writes the credentials file. A rejected key or an unreachable host prints the error and does not say `Saved`.
+
+Pipe a key with `--api-key-stdin`. That reads stdin directly, so `getpass` is not used and Python does not emit `GetPassWarning`:
+
+```bash
+printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --platform dev
+```
+
 Override the host for this login with `--url`, or for every command in the current process with `AIFLUXX_API_URL`:
 
 ```bash
@@ -33,11 +41,24 @@ export AIFLUXX_API_URL=https://api.aifluxx.co.za
 
 `--url` wins over `--platform`, which wins over `AIFLUXX_API_URL`. When `AIFLUXX_API_URL` is set, later commands use it instead of the URL saved at login.
 
-Truest is a named profile. It always uses `https://api.truest.ae`:
+Named platforms:
+
+| `--platform` | API root |
+|---|---|
+| `aifluxx` | `https://api.aifluxx.co.za` |
+| `truest` | `https://api.truest.ae` |
+| `dev` | `https://dev.developer.aifluxx.co.za` |
+| `truest-dev` | `https://dev.developer.truest.ae` |
+
+`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `truest-dev` is the Truest dev developer API. Production stays `aifluxx` and `truest`.
 
 ```bash
+aifluxx login --platform dev
 aifluxx login --platform truest
+aifluxx login --platform truest-dev
 ```
+
+An `afx_dev_` key aimed at a production host (`api.aifluxx.co.za`, `api.truest.ae`, `developer.aifluxx.co.za`, or `developer.truest.ae`) prints a red `WARNING` on stderr. Login still verifies the key. Dev keys belong on `--platform dev` or `--platform truest-dev`.
 
 `https://api.truest.biz` is retired. The CLI rewrites it to `https://api.aifluxx.co.za`. It is not a profile and it is not the default. `--platform truest` is what selects `https://api.truest.ae`.
 
@@ -48,6 +69,7 @@ The legacy `truest` command is a deprecated alias for `aifluxx` and prints a dep
 ## Author a package
 
 ```bash
+aifluxx init --list
 aifluxx init my-agent --template compliance
 aifluxx validate
 aifluxx push
@@ -56,7 +78,11 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. New packages use schema `aifluxx/agent/v1`. `truest/agent/v1` still validates. `validate` is offline. `push` uploads the folder and creates a Draft. It does not `git push`.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default `compliance` starter declares `search_documents` and `get_document` only. New packages use schema `aifluxx/agent/v1`. `truest/agent/v1` still validates.
+
+`validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
+
+`status`, `push`, `submit`, `import-git`, and `keys` print a short text view. States use one casing (`Draft`, `Submitted`, `Published`, `Rejected`, and the same for the other known states). `--json` prints the API payload unchanged. It works on the command (`aifluxx status --json`) and before it (`aifluxx --json status`).
 
 `aifluxx push` sends one request:
 

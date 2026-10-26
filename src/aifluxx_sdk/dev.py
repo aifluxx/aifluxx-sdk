@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 import httpx
 
+from aifluxx_sdk.catalog import parse_tool_catalogue
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
 from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
@@ -26,11 +27,32 @@ class DevClient:
     def me(self) -> dict[str, Any]:
         return self._json(self._http.get(f"{self._api_root}/api/dev/me"))
 
+    def tools(self) -> Any:
+        return self._json(self._http.get(f"{self._api_root}/api/dev/tools"))
+
+    def read_tool_names(self) -> frozenset[str] | None:
+        """Tool ids from ``GET /api/dev/tools``.
+
+        ``None`` means this host does not publish a catalogue (404) or the
+        body was not a catalogue. ``AuthError`` and ``Forbidden`` propagate.
+        A non-response body (tests, proxies) also returns ``None``.
+        """
+        try:
+            payload = self.tools()
+        except HostUnavailable:
+            return None
+        except (TypeError, ValueError, AttributeError):
+            return None
+        if not isinstance(payload, (dict, list)):
+            return None
+        names = parse_tool_catalogue(payload)
+        return names or None
+
     def status(self) -> Any:
         return self._json(self._http.get(f"{self._api_root}/api/dev/agents"))
 
     def push(self, package_dir: Path) -> dict[str, Any]:
-        report = validate_package(package_dir)
+        report = validate_package(package_dir, read_tools=self.read_tool_names())
         if not report.ok:
             codes = ", ".join(sorted({row.code for row in report.errors}))
             raise AifluxxError(f"Package failed validate ({codes}). Run `aifluxx validate`.")
