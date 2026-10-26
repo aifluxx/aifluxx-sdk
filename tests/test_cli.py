@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -9,15 +10,32 @@ from aifluxx_sdk.cli import _client, _verify_credentials, app, currency_for_acco
 from aifluxx_sdk.credentials import load_credentials
 from aifluxx_sdk.exceptions import AuthError
 
-runner = CliRunner()
+# GitHub Actions sets GITHUB_ACTIONS, and Typer then forces a colour terminal.
+# Pin a wide dumb terminal so help text does not wrap or embed ANSI codes.
+# LINES is set with COLUMNS so a dumb terminal keeps this width.
+_HELP_ENV = {
+    "NO_COLOR": "1",
+    "TERM": "dumb",
+    "COLUMNS": "160",
+    "LINES": "40",
+}
+runner = CliRunner(env=_HELP_ENV)
+
+# CSI / SGR sequences Rich inserts when a terminal is forced on.
+_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI.sub("", text)
 
 
 def _text(result) -> str:
-    return result.output + (getattr(result, "stderr", None) or "")
+    raw = result.output + (getattr(result, "stderr", None) or "")
+    return _strip_ansi(raw)
 
 
 def _flat(text: str) -> str:
-    cleaned = text
+    cleaned = _strip_ansi(text)
     for mark in ("│", "╭", "╮", "╰", "╯", "─"):
         cleaned = cleaned.replace(mark, " ")
     return " ".join(cleaned.split())
