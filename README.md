@@ -1,27 +1,35 @@
 # aifluxx-sdk
 
-Python client and `aifluxx` command-line tool for [AIfluxx](https://aifluxx.co.za). The CLI authors an agent package from any IDE terminal. The library calls the developer API and connected-mailbox send as the person who owns the key.
+Python client and `aifluxx` command-line tool for [AIFluxx](https://aifluxx.co.za). The CLI authors an agent package from any IDE terminal. The library calls the developer API and connected-mailbox send as the person who owns the key.
 
-Signup, docs, and the developer site stay on the AIfluxx host. This repository does not ship a UI.
+Signup, docs, and the developer site stay on the AIFluxx host. This repository does not ship a UI.
 
 ## Install
 
 Requires Python 3.11 or newer. The package is not on PyPI; install it from GitHub:
 
 ```bash
-python -m pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
+pip install git+https://github.com/aifluxx/aifluxx-sdk
 ```
 
-To pin a release, append a tag once one is published (none yet), for example `...aifluxx-sdk.git@v0.1.0`.
+To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v0.1.0`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
 ## Log in
 
-The default API root is `https://api.aifluxx.co.za` (`--platform aifluxx`).
+`aifluxx login` defaults to production: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key.
+
+For the dev host, pass `--platform dev`:
 
 ```bash
+aifluxx login --platform dev
 aifluxx login --platform dev --api-key afx_dev_…
+```
+
+Production is the default, so this logs into `aifluxx`:
+
+```bash
 aifluxx login --api-key afx_live_…
 ```
 
@@ -72,7 +80,7 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. `compliance-checklist` is an alias for that same starter. Every starter declares `search_company_knowledge` (the id `GET /api/dev/tools` publishes). `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. `compliance-checklist` is an alias for that same starter. Every starter declares `search_company_knowledge` (the id `GET /api/dev/tools` publishes). `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
 
@@ -103,7 +111,7 @@ aifluxx keys rotate <key-id>
 aifluxx keys revoke <key-id>
 ```
 
-After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is the version UUID when the push response includes one, and `null` when it does not. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
+After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is filled from the push response: an explicit `version_id`, the id on the nested version object, or the response `id` when `version` is the semver that was just uploaded (that object also includes the package slug). It stays `null` when the response has no version UUID. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
 
 ## Getting a developer key
 
@@ -119,7 +127,7 @@ Sign up for a developer account at https://developer.aifluxx.co.za/signup. For h
 | `aifluxx keys rotate <id>` | `POST /api/dev/keys/{id}/rotate` |
 | `aifluxx keys revoke <id>` | `POST /api/dev/keys/{id}/revoke` |
 
-List responses omit the secret. Rotate prints a new secret once. `--save` on rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
+List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Rotate prints a new secret once. `--save` on rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
 
 ## Python
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from aifluxx_sdk.dev import DevClient, _tarball
+from aifluxx_sdk.dev import DevClient, _tarball, version_uuid_from_push
 from aifluxx_sdk.package import LOCAL_META_DIRS
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
@@ -150,6 +150,58 @@ def test_push_stores_version_uuid(tmp_path: Path):
     _assert_push_upload(http.post.call_args_list[0], "agent")
     client.submit("agent", lock=lock)
     assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def test_push_fills_version_id_when_response_includes_slug(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    (package / "spec.yaml").write_text(render_spec("agent", template), encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    http = MagicMock()
+    http.post.return_value = _Res(200, {"id": _VERSION, "slug": "agent", "version": "0.1.0"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    lock = load_lock(package)
+    assert lock is not None
+    assert lock.version_id == _VERSION
+    assert lock.slug == "agent"
+    client.submit("agent", lock=lock)
+    assert http.post.call_args[0][0].endswith(f"/versions/{_VERSION}/submit")
+
+
+def test_version_uuid_from_push_reads_response_shapes():
+    other = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    assert version_uuid_from_push({"id": _VERSION, "slug": "agent", "version": "0.1.0"}, "0.1.0") == _VERSION
+    assert version_uuid_from_push({"id": "agent-1", "slug": "agent", "version": "0.1.0"}, "0.1.0") is None
+    assert (
+        version_uuid_from_push(
+            {"id": other, "slug": "agent", "version_id": _VERSION, "version": "0.1.0"},
+            "0.1.0",
+        )
+        == _VERSION
+    )
+    assert (
+        version_uuid_from_push(
+            {"slug": "agent", "version": {"id": _VERSION, "version": "0.1.0", "state": "draft"}},
+            "0.1.0",
+        )
+        == _VERSION
+    )
+    assert (
+        version_uuid_from_push(
+            {"agent": {"slug": "agent", "versions": [{"id": _VERSION, "version": "0.1.0", "status": "draft"}]}},
+            "0.1.0",
+        )
+        == _VERSION
+    )
+    assert (
+        version_uuid_from_push(
+            {"id": other, "slug": "agent", "version": "9.9.9"},
+            "0.1.0",
+        )
+        is None
+    )
 
 
 def test_push_version_id_stays_empty_without_a_version_uuid(tmp_path: Path):

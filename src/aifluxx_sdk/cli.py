@@ -58,14 +58,36 @@ def _prog() -> str:
 def _platform_help() -> str:
     ordered = ("aifluxx", "dev")
     bits = [f"{name} ({PLATFORMS[name]})" for name in ordered]
-    return "Named host: " + "; ".join(bits) + "."
+    return (
+        "Named host. Default: aifluxx (production). "
+        + "; ".join(bits)
+        + ". Example: aifluxx login --platform dev."
+    )
+
+
+def _named_platform(url: str) -> str | None:
+    normalized = normalize_api_url(url)
+    for name in ("aifluxx", "dev"):
+        if PLATFORMS[name] == normalized:
+            return name
+    return None
+
+
+def _login_banner(url: str) -> str:
+    """Say which platform this login will use. Production stays the default."""
+    name = _named_platform(url)
+    if name == "aifluxx":
+        return f"Logging in to aifluxx (production, {url})."
+    if name == "dev":
+        return f"Logging in to dev ({url})."
+    return f"Logging in to {url}."
 
 
 app = typer.Typer(
     name=_prog(),
     no_args_is_help=True,
     add_completion=False,
-    help="Author an agent package and call the AIfluxx API. Signup stays on the developer site.",
+    help="Author an agent package and call the AIFluxx API. Signup stays on the developer site.",
 )
 keys_app = typer.Typer(no_args_is_help=True, help="List, rotate, or revoke developer API keys.")
 app.add_typer(keys_app, name="keys")
@@ -235,7 +257,11 @@ def _format_keys(keys: list[Any]) -> str:
             lines.append(str(row))
             continue
         ident = str(row.get("id") or row.get("prefix") or "key")
-        bits = [ident]
+        bits: list[str] = []
+        name = row.get("name")
+        if isinstance(name, str) and name.strip() and name.strip() != ident:
+            bits.append(name.strip())
+        bits.append(ident)
         prefix = row.get("prefix")
         if isinstance(prefix, str) and prefix.strip() and prefix.strip() != ident:
             bits.append(prefix.strip())
@@ -326,6 +352,87 @@ def _read_api_key(api_key: str | None, api_key_stdin: bool) -> str:
     return key
 
 
+def _org_dict(account: dict[str, Any]) -> dict[str, Any]:
+    for key in ("org", "organisation", "organization"):
+        value = account.get(key)
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _iso_currency(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    if len(code) == 3 and code.isalpha():
+        return code
+    return None
+
+
+def _find_currency(node: dict[str, Any]) -> str | None:
+    for key in ("currency", "default_currency", "billing_currency"):
+        code = _iso_currency(node.get(key))
+        if code:
+            return code
+    billing = node.get("billing")
+    if isinstance(billing, dict):
+        return _iso_currency(billing.get("currency"))
+    return None
+
+
+def _za_token(value: object) -> bool:
+    """True for a ZA country, region, or locale such as ``ZA`` or ``en-ZA``."""
+    if isinstance(value, dict):
+        return any(_za_token(value.get(key)) for key in ("code", "country", "country_code", "id", "region", "name"))
+    if not isinstance(value, str):
+        return False
+    token = " ".join(value.strip().upper().replace("_", " ").split())
+    if token in {"ZA", "ZAF", "SOUTH AFRICA"}:
+        return True
+    parts = [part for part in token.replace(" ", "-").replace("/", "-").split("-") if part]
+    if not parts:
+        return False
+    if parts[0] == "ZA":
+        return True
+    return len(parts) == 2 and parts[1] == "ZA" and parts[0].isalpha() and len(parts[0]) <= 3
+
+
+def _is_za_region(node: dict[str, Any]) -> bool:
+    return any(_za_token(node.get(key)) for key in ("region", "country", "country_code"))
+
+
+def currency_for_account(account: object | None) -> str:
+    """Currency for a new spec.
+
+    Uses the org currency when ``GET /api/dev/me`` includes one. A ZA-region
+    org with no currency uses ZAR. Otherwise USD.
+    """
+    if not isinstance(account, dict):
+        return "USD"
+    org = _org_dict(account)
+    code = _find_currency(org) or _find_currency(account)
+    if code:
+        return code
+    if _is_za_region(org) or _is_za_region(account):
+        return "ZAR"
+    return "USD"
+
+
+def _account_for_scaffold() -> dict[str, Any] | None:
+    """Logged-in ``GET /api/dev/me`` payload, or None when init cannot read it."""
+    try:
+        creds = load_credentials()
+    except AuthError:
+        return None
+    override = os.environ.get("AIFLUXX_API_URL", "").strip()
+    url = normalize_api_url(override) if override else creds.url
+    try:
+        return _verify_credentials(url, creds.api_key)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        typer.secho(f"Could not read the org currency ({exc}). Using USD.", err=True, fg="yellow")
+        return None
+
+
 def _account_label(payload: object) -> str | None:
     if not isinstance(payload, dict):
         return None
@@ -405,7 +512,7 @@ def root(
     ctx: typer.Context,
     json_output: bool = typer.Option(False, "--json", help="Print API payloads as JSON."),
 ) -> None:
-    """Author an agent package and call the AIfluxx API. Signup stays on the developer site."""
+    """Author an agent package and call the AIFluxx API. Signup stays on the developer site."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = json_output
 
@@ -425,7 +532,11 @@ def login(
     ),
     platform: str | None = typer.Option(None, "--platform", help=_platform_help()),
 ) -> None:
-    """Check the key with GET /api/dev/me, then save it. Works in any IDE terminal."""
+    """Check the key with GET /api/dev/me, then save it. Works in any IDE terminal.
+
+    Login defaults to production (platform aifluxx, https://api.aifluxx.co.za).
+    For the dev host, run: aifluxx login --platform dev
+    """
     key = _read_api_key(api_key, api_key_stdin)
     if not (key.startswith("afx_dev_") or key.startswith("afx_live_") or key.startswith("mcpat_")):
         typer.secho("Keys from Home start with afx_dev_. Subscriber keys start with afx_live_.", fg="yellow")
@@ -434,6 +545,7 @@ def login(
         _refuse_dev_key(key, resolved)
     except AifluxxError as exc:
         _die(exc)
+    typer.echo(_login_banner(resolved))
     try:
         identity = _verify_credentials(resolved, key)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
@@ -486,7 +598,8 @@ def init_cmd(
     if root.exists() and any(root.iterdir()):
         _die(AifluxxError(f"{root} already exists and is not empty."))
     root.mkdir(parents=True, exist_ok=True)
-    (root / "spec.yaml").write_text(render_spec(folder, chosen), encoding="utf-8")
+    currency = currency_for_account(_account_for_scaffold())
+    (root / "spec.yaml").write_text(render_spec(folder, chosen, currency=currency), encoding="utf-8")
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(folder)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
@@ -541,6 +654,80 @@ def _package_for_slug(path: Path | None, slug: str | None) -> Path | None:
     return cwd if spec_slug == slug else None
 
 
+_RUN_FAILURE_STATES = frozenset({"failed", "error", "errored"})
+
+
+def _json_event(line: str) -> dict[str, Any] | None:
+    text = line.strip()
+    if text.startswith("data:"):
+        text = text[5:].strip()
+    if not text or text == "[DONE]":
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _state_name(payload: dict[str, Any]) -> str | None:
+    for key in ("state", "status"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.replace("_", " ").replace("-", " ").split()).lower()
+    return None
+
+
+def _error_text(payload: dict[str, Any]) -> str | None:
+    for key in ("error", "detail", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = _error_text(value)
+            if nested:
+                return nested
+    return None
+
+
+def _outcome_from_payload(payload: dict[str, Any]) -> tuple[str, str | None] | None:
+    """Run state and error text from one stream object."""
+    state = _state_name(payload)
+    error = _error_text(payload)
+    if state is None:
+        for key in ("run", "result", "data"):
+            child = payload.get(key)
+            if isinstance(child, dict):
+                found = _outcome_from_payload(child)
+                if found is not None:
+                    nested_state, nested_error = found
+                    return nested_state, error or nested_error
+        kind = str(payload.get("type") or "").strip().lower().replace("-", " ").replace("_", " ")
+        if kind in _RUN_FAILURE_STATES:
+            state = kind
+    if state is None:
+        return None
+    return state, error
+
+
+def _run_line_outcome(line: str) -> tuple[str, str | None] | None:
+    """State and error from one stream line, or None when the line has no run state."""
+    payload = _json_event(line)
+    if payload is None:
+        return None
+    return _outcome_from_payload(payload)
+
+
+def _run_failure_message(state: str, error: str | None) -> str:
+    if state == "failed":
+        label, plain = "Failed", "Run failed."
+    else:
+        label, plain = "Errored", "Run errored."
+    if error:
+        return f"{label}: {error}"
+    return plain
+
+
 def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tuple[str, str, Path | None]:
     if len(parts) == 1:
         prompt = parts[0]
@@ -574,13 +761,22 @@ def run_cmd(
         help="Version UUID, or a semver to look up. The word latest is never sent to the API.",
     ),
 ) -> None:
-    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt."""
+    """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt.
+
+    Exits 1 when the stream's final state is failed or errored.
+    """
     try:
         package_slug, prompt, package = _run_target(parts, slug, path)
         lock = load_lock(package) if package is not None else None
+        outcome: tuple[str, str | None] | None = None
         with _client() as client:
             for line in client.dev.run(package_slug, prompt, version=version, lock=lock):
                 typer.echo(line)
+                parsed = _run_line_outcome(line)
+                if parsed is not None:
+                    outcome = parsed
+        if outcome is not None and outcome[0] in _RUN_FAILURE_STATES:
+            _die(AifluxxError(_run_failure_message(outcome[0], outcome[1])))
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
 

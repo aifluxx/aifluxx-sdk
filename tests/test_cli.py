@@ -1,23 +1,41 @@
 import json
+import re
 from pathlib import Path
 
 import httpx
 import pytest
 from typer.testing import CliRunner
 
-from aifluxx_sdk.cli import _client, _verify_credentials, app
+from aifluxx_sdk.cli import _client, _verify_credentials, app, currency_for_account
 from aifluxx_sdk.credentials import load_credentials
 from aifluxx_sdk.exceptions import AuthError
 
-runner = CliRunner()
+# GitHub Actions sets GITHUB_ACTIONS, and Typer then forces a colour terminal.
+# Pin a wide dumb terminal so help text does not wrap or embed ANSI codes.
+# LINES is set with COLUMNS so a dumb terminal keeps this width.
+_HELP_ENV = {
+    "NO_COLOR": "1",
+    "TERM": "dumb",
+    "COLUMNS": "160",
+    "LINES": "40",
+}
+runner = CliRunner(env=_HELP_ENV)
+
+# CSI / SGR sequences Rich inserts when a terminal is forced on.
+_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI.sub("", text)
 
 
 def _text(result) -> str:
-    return result.output + (getattr(result, "stderr", None) or "")
+    raw = result.output + (getattr(result, "stderr", None) or "")
+    return _strip_ansi(raw)
 
 
 def _flat(text: str) -> str:
-    cleaned = text
+    cleaned = _strip_ansi(text)
     for mark in ("│", "╭", "╮", "╰", "╯", "─"):
         cleaned = cleaned.replace(mark, " ")
     return " ".join(cleaned.split())
@@ -26,6 +44,82 @@ def _flat(text: str) -> str:
 @pytest.fixture
 def allow_login(monkeypatch):
     monkeypatch.setattr("aifluxx_sdk.cli._verify_credentials", lambda url, api_key: {"org": {"name": "Acme"}})
+
+
+def test_currency_for_account_prefers_org_then_za_region():
+    assert currency_for_account(None) == "USD"
+    assert currency_for_account({"org": {"name": "Acme"}}) == "USD"
+    assert currency_for_account({"org": {"currency": "gbp", "region": "ZA"}}) == "GBP"
+    assert currency_for_account({"org": {"region": "za"}}) == "ZAR"
+    assert currency_for_account({"organisation": {"country": "South Africa"}}) == "ZAR"
+    assert currency_for_account({"organization": {"country_code": "ZAF"}}) == "ZAR"
+    assert currency_for_account({"org": {"region": "en-ZA"}}) == "ZAR"
+    assert currency_for_account({"region": "ZA"}) == "ZAR"
+    assert currency_for_account({"org": {"billing": {"currency": "eur"}}}) == "EUR"
+    assert currency_for_account({"org": {"currency": "R", "region": "ZA"}}) == "ZAR"
+    assert currency_for_account({"org": {"region": "US"}}) == "USD"
+    assert currency_for_account({"org": {"region": "Zambia"}}) == "USD"
+
+
+def test_init_currency_from_org_or_za_region(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
+
+    logged_out = runner.invoke(app, ["init", "offline-agent"])
+    assert logged_out.exit_code == 0, logged_out.output
+    offline = (tmp_path / "offline-agent" / "spec.yaml").read_text(encoding="utf-8")
+    assert "currency: USD" in offline
+
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._account_for_scaffold",
+        lambda: {"org": {"currency": "gbp", "region": "ZA"}},
+    )
+    priced = runner.invoke(app, ["init", "priced-agent"])
+    assert priced.exit_code == 0, priced.output
+    assert "currency: GBP" in (tmp_path / "priced-agent" / "spec.yaml").read_text(encoding="utf-8")
+
+    monkeypatch.setattr("aifluxx_sdk.cli._account_for_scaffold", lambda: {"org": {"region": "ZA"}})
+    za = runner.invoke(app, ["init", "za-agent"])
+    assert za.exit_code == 0, za.output
+    assert "currency: ZAR" in (tmp_path / "za-agent" / "spec.yaml").read_text(encoding="utf-8")
+
+
+def test_init_reads_currency_from_me(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = tmp_path / "credentials"
+    store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    seen: dict[str, str] = {}
+
+    def verify(url, api_key):
+        seen["url"] = url
+        seen["api_key"] = api_key
+        return {"organisation": {"country": "ZA"}}
+
+    monkeypatch.setattr("aifluxx_sdk.cli._verify_credentials", verify)
+    result = runner.invoke(app, ["init", "from-me"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"url": "https://api.example", "api_key": "afx_dev_k"}
+    assert "currency: ZAR" in (tmp_path / "from-me" / "spec.yaml").read_text(encoding="utf-8")
+
+
+def test_init_uses_usd_when_org_lookup_fails(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = tmp_path / "credentials"
+    store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+
+    def explode(url, api_key):
+        raise AuthError("host down")
+
+    monkeypatch.setattr("aifluxx_sdk.cli._verify_credentials", explode)
+    result = runner.invoke(app, ["init", "fallback-agent"])
+    text = _text(result)
+    assert result.exit_code == 0, text
+    assert "Using USD" in text
+    assert "currency: USD" in (tmp_path / "fallback-agent" / "spec.yaml").read_text(encoding="utf-8")
 
 
 def test_init_and_validate(tmp_path: Path, monkeypatch):
@@ -133,6 +227,45 @@ def test_env_url_overrides_saved_credentials(tmp_path: Path, monkeypatch):
         client.close()
 
 
+def test_keys_list_shows_name(tmp_path: Path, monkeypatch):
+    store = tmp_path / "credentials"
+    store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+
+    class _Dev:
+        def list_keys(self):
+            return {
+                "keys": [
+                    {"id": "k1", "name": "laptop", "prefix": "afx_dev_", "status": "active"},
+                    {"id": "k2", "prefix": "afx_live_"},
+                ]
+            }
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    listed = runner.invoke(app, ["keys", "list"])
+    text = _text(listed)
+    assert listed.exit_code == 0, text
+    assert "laptop" in text
+    assert "k1" in text
+    assert "Active" in text
+    named = next(line for line in text.splitlines() if "k1" in line)
+    assert named.index("laptop") < named.index("k1")
+    unnamed = next(line for line in text.splitlines() if "k2" in line)
+    assert "laptop" not in unnamed
+    raw = runner.invoke(app, ["keys", "list", "--json"])
+    assert '"name": "laptop"' in raw.output
+
+
 def test_keys_list_rotate_revoke(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
@@ -207,6 +340,63 @@ def test_run_reads_slug_from_package_or_argument(tmp_path: Path, monkeypatch):
     assert seen == {"slug": "other-agent", "prompt": "Hello there"}
 
 
+def _fake_run(lines: list[str]):
+    class _Dev:
+        def run(self, slug, prompt, *, version=None, lock=None):
+            yield from lines
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    return _Fake()
+
+
+def test_run_exits_nonzero_when_final_state_failed_or_errored(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(
+            [
+                '{"type":"text","delta":"partial"}',
+                '{"type":"done","state":"failed","error":"tool timed out"}',
+            ]
+        ),
+    )
+    failed = runner.invoke(app, ["run", "my-agent", "hello"])
+    failed_text = _text(failed)
+    assert failed.exit_code == 1, failed_text
+    assert "partial" in failed_text
+    assert "Failed: tool timed out" in failed_text
+
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(['data: {"status":"errored","error":{"message":"sandbox crashed"}}']),
+    )
+    errored = runner.invoke(app, ["run", "my-agent", "hello"])
+    errored_text = _text(errored)
+    assert errored.exit_code == 1, errored_text
+    assert "Errored: sandbox crashed" in errored_text
+
+    monkeypatch.setattr(
+        "aifluxx_sdk.cli._client",
+        lambda: _fake_run(['{"state":"failed","error":"ignored"}', '{"type":"done","status":"completed"}']),
+    )
+    completed = runner.invoke(app, ["run", "my-agent", "hello"])
+    assert completed.exit_code == 0, completed.output
+    assert "Failed:" not in _text(completed)
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _fake_run(['{"state":"FAILED"}']))
+    bare = runner.invoke(app, ["run", "my-agent", "hello"])
+    assert bare.exit_code == 1
+    assert "Run failed." in _text(bare)
+
+
 def test_run_outside_package_requires_slug(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["run", "just a prompt"])
@@ -223,9 +413,21 @@ def test_validate_without_package(tmp_path: Path, monkeypatch):
 
 def test_help_lists_login():
     result = runner.invoke(app, ["--help"])
-    assert result.exit_code == 0, result.output
-    assert "login" in result.output
-    assert "--json" in result.output
+    text = _text(result)
+    assert result.exit_code == 0, text
+    assert "login" in text
+    assert "--json" in text
+    assert "AIFluxx" in text
+    assert "AIfluxx" not in text
+
+
+def test_readme_install_dev_login_and_brand():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
+    assert "aifluxx-sdk @ git+" not in readme
+    assert "aifluxx login --platform dev" in readme
+    assert "AIFluxx" in readme
+    assert "AIfluxx" not in readme
 
 
 def test_login_help_lists_dev_platform_and_stdin():
@@ -237,6 +439,27 @@ def test_login_help_lists_dev_platform_and_stdin():
     flat = _flat(text)
     assert "dev.developer.aifluxx.co.za" in flat
     assert "aifluxx (https://api.aifluxx.co.za)" in flat
+    assert "aifluxx login --platform dev" in flat
+    assert "production" in flat.lower()
+
+
+def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):
+    store = tmp_path / "credentials"
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    prod = runner.invoke(app, ["login", "--api-key", "afx_live_test_key"])
+    prod_text = _text(prod)
+    assert prod.exit_code == 0, prod_text
+    assert "Logging in to aifluxx (production, https://api.aifluxx.co.za)." in prod_text
+    dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
+    dev_text = _text(dev)
+    assert dev.exit_code == 0, dev_text
+    assert "Logging in to dev (https://dev.developer.aifluxx.co.za)." in dev_text
+    assert "production" not in dev_text
+    custom = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"])
+    custom_text = _text(custom)
+    assert custom.exit_code == 0, custom_text
+    assert "Logging in to https://api.example." in custom_text
+    assert "Verified https://api.example (Acme)." in custom_text
 
 
 def test_login_platform_dev(tmp_path: Path, monkeypatch, allow_login):
