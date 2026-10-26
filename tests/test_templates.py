@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -97,7 +98,7 @@ def test_default_init_output_does_not_name_the_other_brand(tmp_path: Path, monke
     assert listed.exit_code == 0, listed.output
     assert created.exit_code == 0, created.output
     spec = (tmp_path / "board" / "spec.yaml").read_text(encoding="utf-8")
-    help_text = help_result.output
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", help_result.output)
     for mark in ("│", "╭", "╮", "╰", "╯", "─"):
         help_text = help_text.replace(mark, " ")
     help_text = " ".join(help_text.split())
