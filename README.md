@@ -36,7 +36,7 @@ Pipe a key with `--api-key-stdin`. That reads stdin directly, so `getpass` is no
 printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --env dev
 ```
 
-`--platform` is `truest` or `za`. `--env` is `dev` or `prod`. This README lists the ZA developer hosts. When the selected platform is truest, `aifluxx login --help` prints that platform's hosts.
+`--platform` is `truest` or `za`. `--env` is `dev` or `prod`. `aifluxx login --help` lists those choices and does not print a host table. It prints the one resolved host for the current selection. This README lists the ZA developer hosts.
 
 | platform | env | API root |
 |---|---|---|

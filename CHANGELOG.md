@@ -4,7 +4,7 @@
 
 ### Changed
 
-- `aifluxx login` resolves the developer API host from `--platform` (`truest` or `za`; `aifluxx` is an alias of `za`) and `--env` (`dev` or `prod`). ZA production is `https://developer.aifluxx.co.za`. ZA dev is `https://dev.developer.aifluxx.co.za`. `--platform dev` remains a deprecated alias of ZA dev. `--url` still overrides the named host. `AIFLUXX_PLATFORM`, `AIFLUXX_ENV`, and `~/.aifluxx/config.json` supply the same choice. Help for each platform lists only that platform's hosts.
+- `aifluxx login` resolves the developer API host from `--platform` (`truest` or `za`; `aifluxx` is an alias of `za`) and `--env` (`dev` or `prod`). ZA production is `https://developer.aifluxx.co.za`. ZA dev is `https://dev.developer.aifluxx.co.za`. `--platform dev` remains a deprecated alias of ZA dev. `--url` still overrides the named host. `AIFLUXX_PLATFORM`, `AIFLUXX_ENV`, and `~/.aifluxx/config.json` supply the same choice. `aifluxx login --help` lists platforms and envs without host URLs, and prints only the one resolved host.
 
 ### Fixed
 

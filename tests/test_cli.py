@@ -477,33 +477,41 @@ def test_login_help_lists_dev_platform_and_stdin(tmp_path: Path, monkeypatch):
     assert "--env" in text
     assert "--api-key-stdin" in text
     flat = _flat(text)
-    assert "https://dev.developer.aifluxx.co.za" in flat
+    assert "truest or za" in flat
+    assert "dev or prod" in flat
     assert "https://developer.aifluxx.co.za" in flat
+    assert "https://dev.developer.aifluxx.co.za" not in flat
     assert "truest.ae" not in flat
     assert "aifluxx login --platform dev" in flat
-    assert "production" in flat.lower()
 
 
-def test_login_help_for_truest_hides_aifluxx_hosts(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+def test_login_help_hides_the_other_brands_hosts(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("AIFLUXX_ENV", raising=False)
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
     monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
-    result = runner.invoke(app, ["login", "--help"])
-    flat = _flat(_text(result))
-    assert result.exit_code == 0, flat
-    assert "https://developer.truest.ae" in flat
-    assert "https://dev.developer.truest.ae" in flat
-    assert "aifluxx.co.za" not in flat
+
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+    truest = _flat(_text(runner.invoke(app, ["login", "--help"])))
+    assert "aifluxx.co.za" not in truest
+    assert "https://developer.truest.ae" in truest
+    assert "https://dev.developer.truest.ae" not in truest
+
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "za")
+    za = _flat(_text(runner.invoke(app, ["login", "--help"])))
+    assert "truest.ae" not in za
+    assert "https://developer.aifluxx.co.za" in za
+    assert "https://dev.developer.aifluxx.co.za" not in za
+
     root = _flat(_text(runner.invoke(app, ["--help"])))
-    assert "Truest" in root
     assert "aifluxx.co.za" not in root
-    assert "AIFluxx" not in root
-    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
-    flagged = runner.invoke(app, ["login", "--platform", "truest", "--help"])
-    flagged_flat = _flat(_text(flagged))
-    assert "https://developer.truest.ae" in flagged_flat
-    assert "aifluxx.co.za" not in flagged_flat
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+    truest_root = _flat(_text(runner.invoke(app, ["--help"])))
+    assert "Truest" in truest_root
+    assert "aifluxx.co.za" not in truest_root
+    assert "AIFluxx" not in truest_root
+    flagged = _flat(_text(runner.invoke(app, ["login", "--platform", "truest", "--help"])))
+    assert "aifluxx.co.za" not in flagged
+    assert "https://developer.truest.ae" in flagged
 
 
 def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):

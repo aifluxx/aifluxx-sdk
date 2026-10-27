@@ -12,7 +12,6 @@ import typer
 
 from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.credentials import (
-    DEVELOPER_HOSTS,
     ApiTarget,
     Credentials,
     brand_of_url,
@@ -114,54 +113,44 @@ def _root_help(brand: str | None) -> str:
     return _ZA_ROOT_HELP
 
 
-def _login_option_help(name: str, brand: str | None) -> str:
+def _login_option_help(name: str) -> str:
+    """Option help lists choices only. Hosts are not written here."""
     if name == "url":
         return "API root. Overrides --platform, --env, and the platform environment variables."
     if name == "env":
         return "Developer environment: dev or prod. Default: prod."
-    choices = "Platform: truest or za. aifluxx is an alias of za. dev is a deprecated alias of za dev."
-    if brand == "truest":
-        return (
-            f"{choices} Truest dev {DEVELOPER_HOSTS[('truest', 'dev')]}. "
-            f"Truest prod {DEVELOPER_HOSTS[('truest', 'prod')]}."
-        )
-    if brand == "za":
-        return (
-            f"{choices} ZA dev {DEVELOPER_HOSTS[('za', 'dev')]}. "
-            f"ZA prod {DEVELOPER_HOSTS[('za', 'prod')]}."
-        )
-    return choices
+    return "Platform: truest or za. aifluxx is an alias of za. dev is a deprecated alias of za dev."
 
 
-def _login_command_help(brand: str | None) -> str:
-    base = (
+def _resolved_host_line(ctx: typer.Context | None) -> str:
+    """One host: the developer API selected by the current flags, env, and config."""
+    try:
+        target = resolve_api_target(platform=_help_param(ctx, "platform"), env=_help_param(ctx, "env"))
+    except AifluxxError:
+        return ""
+    return f"Resolved host: {target.url}."
+
+
+def _login_command_help(ctx: typer.Context | None) -> str:
+    text = (
         "Check the key with GET /api/dev/me, then save it. Works in any IDE terminal.\n\n"
-        "Pass --platform and --env to choose the developer API. --url overrides that host. "
-        "--platform dev remains a deprecated alias."
+        "Pass --platform (truest or za) and --env (dev or prod) to choose the developer API. "
+        "aifluxx is an alias of za. --platform dev remains a deprecated alias. "
+        "Deprecated: aifluxx login --platform dev. "
+        "--url overrides that host."
     )
-    if brand == "za":
-        return (
-            base
-            + f"\n\nDefault: za production, {DEVELOPER_HOSTS[('za', 'prod')]}. "
-            + f"Dev: aifluxx login --env dev ({DEVELOPER_HOSTS[('za', 'dev')]}). "
-            + "Deprecated: aifluxx login --platform dev."
-        )
-    if brand == "truest":
-        return (
-            base
-            + f"\n\nDefault for this platform: truest production, {DEVELOPER_HOSTS[('truest', 'prod')]}. "
-            + f"Dev: aifluxx login --env dev ({DEVELOPER_HOSTS[('truest', 'dev')]})."
-        )
-    return base
+    resolved = _resolved_host_line(ctx)
+    if resolved:
+        text += "\n\n" + resolved
+    return text
 
 
 def _refresh_login_help(command: TyperCommand, ctx: typer.Context) -> None:
-    brand = _help_brand(ctx)
-    command.help = _login_command_help(brand)
+    command.help = _login_command_help(ctx)
     for param in command.params:
         name = getattr(param, "name", None)
         if name in {"url", "platform", "env"}:
-            param.help = _login_option_help(str(name), brand)
+            param.help = _login_option_help(str(name))
 
 
 class _BrandCommand(TyperCommand):
