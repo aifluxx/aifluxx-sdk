@@ -31,6 +31,7 @@ from aifluxx_sdk.templates import (
     template_option_help,
     template_rows,
 )
+from aifluxx_sdk.ui_starter import ensure_ui_starter
 
 _SECRET_FIELDS = ("api_key", "key", "secret", "token")
 _STATE_LABELS = {
@@ -584,6 +585,14 @@ def init_cmd(
     template: str = typer.Option(DEFAULT_TEMPLATE, "--template", "-t", help=template_option_help()),
     dest: Path | None = typer.Option(None, "--dest", help="Parent folder. Defaults to the current directory."),
     list_templates: bool = typer.Option(False, "--list", help="List starter templates and do not write a package."),
+    no_ui_starter: bool = typer.Option(
+        False,
+        "--no-ui-starter",
+        help=(
+            "Do not fetch the pinned starter UI beside the working directory. "
+            "AIFLUXX_NO_UI_STARTER=1 does the same."
+        ),
+    ),
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
@@ -612,6 +621,10 @@ def init_cmd(
     root = (dest or Path.cwd()).resolve() / folder
     if root.exists() and any(root.iterdir()):
         _die(AifluxxError(f"{root} already exists and is not empty."))
+    try:
+        starter_note = ensure_ui_starter(skip=no_ui_starter)
+    except AifluxxError as exc:
+        _die(exc)
     root.mkdir(parents=True, exist_ok=True)
     currency = currency_for_account(_account_for_scaffold())
     (root / "spec.yaml").write_text(
@@ -622,6 +635,8 @@ def init_cmd(
     (root / "README.md").write_text(f"# {slug_to_name(folder)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
     typer.echo(f"Created {root}. Commit this folder to your Git repo, then `aifluxx push` or Import from Git.")
+    if starter_note:
+        typer.echo(starter_note)
 
 
 @app.command()

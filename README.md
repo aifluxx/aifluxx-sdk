@@ -2,7 +2,7 @@
 
 Python client and `aifluxx` command-line tool for [AIFluxx](https://aifluxx.co.za). The CLI authors an agent package from any IDE terminal. The library calls the developer API and connected-mailbox send as the person who owns the key.
 
-Signup, docs, and the developer site stay on the AIFluxx host. This repository does not ship a UI.
+Signup, docs, and the developer site stay on the AIFluxx host. This repository does not embed a UI. `aifluxx init` checks out the pinned starter console beside the working directory.
 
 ## Install
 
@@ -13,6 +13,8 @@ pip install git+https://github.com/aifluxx/aifluxx-sdk
 ```
 
 To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v0.1.0`.
+
+Installing the package does not clone the starter UI. `pip install` has no post-install git fetch. `aifluxx init` checks out the pinned console.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
@@ -81,6 +83,17 @@ aifluxx submit
 ```
 
 `init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
+
+`aifluxx init` also fetches https://github.com/aifluxx/aifluxx-starter-ui into `aifluxx-starter-ui/` beside the working directory (the parent of the current directory). The checkout is pinned to commit `cd86e3468875968a6e63b1d2e4835368777fdf3b` (AIFluxx Starter Console v0.1). That repository has no tag yet. If `aifluxx-starter-ui` already exists, init leaves it unchanged, including when the folder is empty. `--no-ui-starter` skips the fetch. `AIFLUXX_NO_UI_STARTER=1` does the same (`true`, `yes`, and `on` count; `0` does not). `aifluxx init --list` does not fetch it. `--dest` chooses the package folder only. The starter stays beside the working directory.
+
+When git is missing or the fetch fails, init stops before it writes the package and prints a manual fallback:
+
+```bash
+git clone https://github.com/aifluxx/aifluxx-starter-ui.git ../aifluxx-starter-ui
+git -C ../aifluxx-starter-ui checkout --detach cd86e3468875968a6e63b1d2e4835368777fdf3b
+```
+
+Run those from the working directory, then run `aifluxx init` again. Delete `aifluxx-starter-ui` yourself before a fresh checkout; init will not overwrite it.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
 

@@ -6,6 +6,10 @@
 
 - Starter tools and aliases match `GET /api/dev/templates`. `compliance` scaffolds `list_obligations`. `finance` and the document Q&A starter scaffold `ask_assistant`. `standup` and `account-snapshot` no longer add `get_document`. `finance-summariser` and `qa-documents` select those starters, along with `compliance-checklist`. The ask tool id follows the API host.
 
+### Added
+
+- `aifluxx init` fetches starter UI commit `cd86e3468875968a6e63b1d2e4835368777fdf3b` into `aifluxx-starter-ui/` beside the working directory. An existing folder is left unchanged. `--no-ui-starter` and `AIFLUXX_NO_UI_STARTER=1` skip the fetch. Installing the package does not clone the repository.
+
 ### Breaking
 
 - The legacy agent schema id is no longer accepted. Packages must use `aifluxx/agent/v1`.
