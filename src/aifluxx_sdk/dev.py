@@ -12,6 +12,7 @@ from urllib.parse import quote
 import httpx
 
 from aifluxx_sdk.catalog import parse_tool_catalogue
+from aifluxx_sdk.credentials import PUBLIC_API_URL, api_hostname
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
 from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
@@ -213,8 +214,15 @@ def _redirect_message(res: httpx.Response) -> str:
     message = f"{where}: redirects to {target}."
     if location.startswith("http://"):
         message += " The Location URL is http, so the host is downgrading TLS."
-    if "/mcp" in str(getattr(getattr(res, "request", None), "url", "")) or "/mcp" in location:
-        message += " For MCP, use the https URL exactly as shown: https://api.aifluxx.co.za/mcp/"
+    request_url = str(getattr(getattr(res, "request", None), "url", "") or "")
+    if "/mcp" in request_url or "/mcp" in location:
+        host = api_hostname(request_url) or api_hostname(location)
+        if host == "truest.ae" or host.endswith(".truest.ae"):
+            message += " For MCP, use the https URL with a trailing slash."
+        elif host == "aifluxx.co.za" or host.endswith(".aifluxx.co.za"):
+            message += f" For MCP, use the https URL exactly as shown: {PUBLIC_API_URL}/mcp/"
+        else:
+            message += " For MCP, use the https URL with a trailing slash."
     return message
 
 

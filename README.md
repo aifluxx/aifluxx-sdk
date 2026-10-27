@@ -18,53 +18,55 @@ You need an approved developer account to get an API key. Sign up at https://dev
 
 ## Log in
 
-`aifluxx login` defaults to production: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key.
-
-For the dev host, pass `--platform dev`:
-
-```bash
-aifluxx login --platform dev
-aifluxx login --platform dev --api-key afx_dev_…
-```
-
-Production is the default, so this logs into `aifluxx`:
+`aifluxx login` calls the developer API (`/api/dev/...`) on the developer host. The default is platform `za`, env `prod`, API root `https://developer.aifluxx.co.za`. It prints that host before it checks the key. `aifluxx` is an alias of `za`.
 
 ```bash
 aifluxx login --api-key afx_live_…
+aifluxx login --env dev --api-key afx_dev_…
+aifluxx login --platform za --env dev
 ```
 
 `login` calls `GET /api/dev/me` before it writes the credentials file. A rejected key or an unreachable host prints the error and does not say `Saved`.
 
-An `afx_dev_` key aimed at a production host (`api.aifluxx.co.za` or `developer.aifluxx.co.za`) is refused before any request, including the login check and later commands. Nothing is saved. Dev keys belong on `--platform dev`.
+An `afx_dev_` key aimed at a production host (`developer.aifluxx.co.za` or `api.aifluxx.co.za`) is refused before any request, including the login check and later commands. Nothing is saved. Dev keys belong on `--env dev` (`https://dev.developer.aifluxx.co.za`).
 
 Pipe a key with `--api-key-stdin`. That reads stdin directly, so `getpass` is not used and Python does not emit `GetPassWarning`:
 
 ```bash
-printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --platform dev
+printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --env dev
 ```
 
-Override the host for this login with `--url`, or for every command in the current process with `AIFLUXX_API_URL`:
+`--platform` is `truest` or `za`. `--env` is `dev` or `prod`. This README lists the ZA developer hosts. When the selected platform is truest, `aifluxx login --help` prints that platform's hosts.
+
+| platform | env | API root |
+|---|---|---|
+| `za` (default), `aifluxx` | `prod` | `https://developer.aifluxx.co.za` |
+| `za`, `aifluxx` | `dev` | `https://dev.developer.aifluxx.co.za` |
+
+`aifluxx login --platform dev` still selects `https://dev.developer.aifluxx.co.za`. That platform value is deprecated. Use `aifluxx login --env dev`.
+
+Host selection, highest first:
+
+1. `--url`
+2. `--platform` and `--env`. An omitted flag falls through to the next source.
+3. `AIFLUXX_PLATFORM` and `AIFLUXX_ENV`. When neither is set, `AIFLUXX_API_URL` is the env URL.
+4. `~/.aifluxx/config.json`, with string keys `platform` and `env`. `AIFLUXX_CONFIG` overrides that path.
+5. Default: platform `za`, env `prod`.
 
 ```bash
-aifluxx login --url https://api.aifluxx.co.za --api-key afx_live_…
-export AIFLUXX_API_URL=https://dev.developer.aifluxx.co.za
+aifluxx login --url https://developer.aifluxx.co.za --api-key afx_live_…
+export AIFLUXX_PLATFORM=za
+export AIFLUXX_ENV=dev
 ```
 
-`--url` wins over `--platform`, which wins over `AIFLUXX_API_URL`. When `AIFLUXX_API_URL` is set, later commands use it instead of the URL saved at login.
-
-Named platforms:
-
-| `--platform` | API root |
-|---|---|
-| `aifluxx` | `https://api.aifluxx.co.za` |
-| `dev` | `https://dev.developer.aifluxx.co.za` |
-
-`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `aifluxx` is production. Any other host is a custom `--url`.
-
-```bash
-aifluxx login --platform dev
-aifluxx login --platform aifluxx --api-key afx_live_…
+```json
+{
+  "platform": "za",
+  "env": "dev"
+}
 ```
+
+Later commands use the URL saved at login. `AIFLUXX_PLATFORM` or `AIFLUXX_ENV` overrides that saved URL. When those are unset, `AIFLUXX_API_URL` overrides it. The config file does not override a saved login. Mail send and MCP stay on `https://api.aifluxx.co.za`. That public API host is not the developer API default.
 
 Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. The override for the path is `AIFLUXX_CREDENTIALS`. The file stays on your machine. Do not commit it.
 

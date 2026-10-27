@@ -171,6 +171,9 @@ def test_login_refuses_dev_key_on_prod_before_network(tmp_path: Path, monkeypatc
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
     seen: list[str] = []
     monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", _http_factory(seen))
     result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
@@ -179,12 +182,20 @@ def test_login_refuses_dev_key_on_prod_before_network(tmp_path: Path, monkeypatc
     assert seen == []
     assert "production" in text
     assert "No request was sent" in text
+    assert "https://dev.developer.aifluxx.co.za" in text
+    assert "truest.ae" not in text
     assert "Saved" not in text
     assert not store.exists()
     explicit = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "aifluxx"])
     assert explicit.exit_code == 1
     assert seen == []
     assert not store.exists()
+    truest = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "truest"])
+    truest_text = _text(truest)
+    assert truest.exit_code == 1, truest_text
+    assert "https://dev.developer.truest.ae" in truest_text
+    assert "aifluxx.co.za" not in truest_text
+    assert seen == []
 
 
 def test_verify_and_client_refuse_dev_key_on_prod_before_network(tmp_path: Path, monkeypatch):
@@ -209,10 +220,34 @@ def test_verify_and_client_refuse_dev_key_on_prod_before_network(tmp_path: Path,
 def test_login_uses_env_url(tmp_path: Path, monkeypatch, allow_login):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
     monkeypatch.setenv("AIFLUXX_API_URL", "https://api.example")
     result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
     assert result.exit_code == 0, result.output
     assert load_credentials(store).url == "https://api.example"
+
+
+def test_login_uses_platform_env_and_config(tmp_path: Path, monkeypatch, allow_login):
+    store = tmp_path / "credentials"
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+    monkeypatch.setenv("AIFLUXX_ENV", "dev")
+    result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
+    text = _text(result)
+    assert result.exit_code == 0, text
+    assert load_credentials(store).url == "https://dev.developer.truest.ae"
+    assert "aifluxx.co.za" not in text
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    config = tmp_path / "config.json"
+    config.write_text('{"platform": "za", "env": "dev"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(config))
+    configured = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
+    assert configured.exit_code == 0, configured.output
+    assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
+    assert "truest.ae" not in _text(configured)
 
 
 def test_env_url_overrides_saved_credentials(tmp_path: Path, monkeypatch):
@@ -430,31 +465,66 @@ def test_readme_install_dev_login_and_brand():
     assert "AIfluxx" not in readme
 
 
-def test_login_help_lists_dev_platform_and_stdin():
+def test_login_help_lists_dev_platform_and_stdin(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
     result = runner.invoke(app, ["login", "--help"])
     text = _text(result)
     assert result.exit_code == 0, text
     assert "--platform" in text
+    assert "--env" in text
     assert "--api-key-stdin" in text
     flat = _flat(text)
-    assert "dev.developer.aifluxx.co.za" in flat
-    assert "aifluxx (https://api.aifluxx.co.za)" in flat
+    assert "https://dev.developer.aifluxx.co.za" in flat
+    assert "https://developer.aifluxx.co.za" in flat
+    assert "truest.ae" not in flat
     assert "aifluxx login --platform dev" in flat
     assert "production" in flat.lower()
+
+
+def test_login_help_for_truest_hides_aifluxx_hosts(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
+    result = runner.invoke(app, ["login", "--help"])
+    flat = _flat(_text(result))
+    assert result.exit_code == 0, flat
+    assert "https://developer.truest.ae" in flat
+    assert "https://dev.developer.truest.ae" in flat
+    assert "aifluxx.co.za" not in flat
+    root = _flat(_text(runner.invoke(app, ["--help"])))
+    assert "Truest" in root
+    assert "aifluxx.co.za" not in root
+    assert "AIFluxx" not in root
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    flagged = runner.invoke(app, ["login", "--platform", "truest", "--help"])
+    flagged_flat = _flat(_text(flagged))
+    assert "https://developer.truest.ae" in flagged_flat
+    assert "aifluxx.co.za" not in flagged_flat
 
 
 def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
     prod = runner.invoke(app, ["login", "--api-key", "afx_live_test_key"])
     prod_text = _text(prod)
     assert prod.exit_code == 0, prod_text
-    assert "Logging in to aifluxx (production, https://api.aifluxx.co.za)." in prod_text
+    assert "Logging in to za (production, https://developer.aifluxx.co.za)." in prod_text
+    assert "truest.ae" not in prod_text
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     dev_text = _text(dev)
     assert dev.exit_code == 0, dev_text
-    assert "Logging in to dev (https://dev.developer.aifluxx.co.za)." in dev_text
+    assert "Logging in to za dev (https://dev.developer.aifluxx.co.za)." in dev_text
+    assert "deprecated" in dev_text.lower()
     assert "production" not in dev_text
+    assert "truest.ae" not in dev_text
     custom = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"])
     custom_text = _text(custom)
     assert custom.exit_code == 0, custom_text
@@ -462,23 +532,62 @@ def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):
     assert "Verified https://api.example (Acme)." in custom_text
 
 
-def test_login_platform_dev(tmp_path: Path, monkeypatch, allow_login):
+def test_login_platform_and_env(tmp_path: Path, monkeypatch, allow_login):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     assert dev.exit_code == 0, dev.output
     assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
     assert "production" not in _text(dev)
     assert "Saved" in _text(dev)
+    za_dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "za", "--env", "dev"])
+    assert za_dev.exit_code == 0, za_dev.output
+    assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
+    alias = runner.invoke(
+        app,
+        ["login", "--api-key", "afx_dev_test_key", "--platform", "aifluxx", "--env", "dev"],
+    )
+    assert alias.exit_code == 0, alias.output
+    assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
+    truest = runner.invoke(
+        app,
+        ["login", "--api-key", "afx_live_test_key", "--platform", "truest", "--env", "prod"],
+    )
+    truest_text = _text(truest)
+    assert truest.exit_code == 0, truest_text
+    assert load_credentials(store).url == "https://developer.truest.ae"
+    assert "Logging in to truest (production, https://developer.truest.ae)." in truest_text
+    assert "aifluxx.co.za" not in truest_text
+    url_wins = runner.invoke(
+        app,
+        [
+            "login",
+            "--api-key",
+            "afx_dev_test_key",
+            "--platform",
+            "truest",
+            "--env",
+            "dev",
+            "--url",
+            "https://api.example/root/",
+        ],
+    )
+    assert url_wins.exit_code == 0, url_wins.output
+    assert load_credentials(store).url == "https://api.example/root"
 
 
 def test_login_live_key_on_prod_does_not_warn(tmp_path: Path, monkeypatch, allow_login):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_PLATFORM", raising=False)
+    monkeypatch.delenv("AIFLUXX_ENV", raising=False)
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
     result = runner.invoke(app, ["login", "--api-key", "afx_live_test_key"])
     assert result.exit_code == 0, result.output
     assert "WARNING" not in _text(result)
-    assert load_credentials(store).url == "https://api.aifluxx.co.za"
+    assert load_credentials(store).url == "https://developer.aifluxx.co.za"
 
 
 def test_login_verifies_me_before_saving(tmp_path: Path, monkeypatch):

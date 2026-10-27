@@ -12,14 +12,21 @@ import typer
 
 from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.credentials import (
-    PLATFORMS,
+    DEVELOPER_HOSTS,
+    ApiTarget,
     Credentials,
+    brand_of_url,
+    dev_key_hint,
     dev_key_on_prod_host,
     load_credentials,
+    load_host_config,
+    named_developer_env,
     normalize_api_url,
+    resolve_api_target,
     resolve_api_url,
     save_credentials,
 )
+from typer.core import TyperCommand, TyperGroup
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.package import validate_package
@@ -55,39 +62,145 @@ def _prog() -> str:
     return "aifluxx"
 
 
-def _platform_help() -> str:
-    ordered = ("aifluxx", "dev")
-    bits = [f"{name} ({PLATFORMS[name]})" for name in ordered]
-    return (
-        "Named host. Default: aifluxx (production). "
-        + "; ".join(bits)
-        + ". Example: aifluxx login --platform dev."
-    )
+_ZA_ROOT_HELP = "Author an agent package and call the AIFluxx API. Signup stays on the developer site."
+_TRUEST_ROOT_HELP = "Author an agent package and call the Truest developer API. Signup stays on the developer site."
+_DEV_PLATFORM_WARNING = (
+    "Warning: platform dev is deprecated. It selects the ZA dev developer API. "
+    "Use --platform za --env dev."
+)
 
 
-def _named_platform(url: str) -> str | None:
-    normalized = normalize_api_url(url)
-    for name in ("aifluxx", "dev"):
-        if PLATFORMS[name] == normalized:
-            return name
+def _remember_host_flag(name: str):
+    """Stash --platform / --env before Click's eager --help exits."""
+
+    def callback(ctx: typer.Context, _param: object, value: str | None) -> str | None:
+        if isinstance(value, str) and value.strip():
+            ctx.ensure_object(dict)
+            if isinstance(ctx.obj, dict):
+                ctx.obj[name] = value.strip()
+        return value
+
+    return callback
+
+
+def _help_param(ctx: typer.Context | None, name: str) -> str | None:
+    current: typer.Context | None = ctx
+    while current is not None:
+        obj = getattr(current, "obj", None)
+        if isinstance(obj, dict):
+            stored = obj.get(name)
+            if isinstance(stored, str) and stored.strip():
+                return stored.strip()
+        params = getattr(current, "params", None) or {}
+        value = params.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        current = current.parent
     return None
 
 
+def _help_brand(ctx: typer.Context | None) -> str | None:
+    """Brand for help text. None when the host cannot be resolved."""
+    try:
+        target = resolve_api_target(platform=_help_param(ctx, "platform"), env=_help_param(ctx, "env"))
+    except AifluxxError:
+        return None
+    return brand_of_url(target.url)
+
+
+def _root_help(brand: str | None) -> str:
+    if brand == "truest":
+        return _TRUEST_ROOT_HELP
+    return _ZA_ROOT_HELP
+
+
+def _login_option_help(name: str, brand: str | None) -> str:
+    if name == "url":
+        return "API root. Overrides --platform, --env, and the platform environment variables."
+    if name == "env":
+        return "Developer environment: dev or prod. Default: prod."
+    choices = "Platform: truest or za. aifluxx is an alias of za. dev is a deprecated alias of za dev."
+    if brand == "truest":
+        return (
+            f"{choices} Truest dev {DEVELOPER_HOSTS[('truest', 'dev')]}. "
+            f"Truest prod {DEVELOPER_HOSTS[('truest', 'prod')]}."
+        )
+    if brand == "za":
+        return (
+            f"{choices} ZA dev {DEVELOPER_HOSTS[('za', 'dev')]}. "
+            f"ZA prod {DEVELOPER_HOSTS[('za', 'prod')]}."
+        )
+    return choices
+
+
+def _login_command_help(brand: str | None) -> str:
+    base = (
+        "Check the key with GET /api/dev/me, then save it. Works in any IDE terminal.\n\n"
+        "Pass --platform and --env to choose the developer API. --url overrides that host. "
+        "--platform dev remains a deprecated alias."
+    )
+    if brand == "za":
+        return (
+            base
+            + f"\n\nDefault: za production, {DEVELOPER_HOSTS[('za', 'prod')]}. "
+            + f"Dev: aifluxx login --env dev ({DEVELOPER_HOSTS[('za', 'dev')]}). "
+            + "Deprecated: aifluxx login --platform dev."
+        )
+    if brand == "truest":
+        return (
+            base
+            + f"\n\nDefault for this platform: truest production, {DEVELOPER_HOSTS[('truest', 'prod')]}. "
+            + f"Dev: aifluxx login --env dev ({DEVELOPER_HOSTS[('truest', 'dev')]})."
+        )
+    return base
+
+
+def _refresh_login_help(command: TyperCommand, ctx: typer.Context) -> None:
+    brand = _help_brand(ctx)
+    command.help = _login_command_help(brand)
+    for param in command.params:
+        name = getattr(param, "name", None)
+        if name in {"url", "platform", "env"}:
+            param.help = _login_option_help(str(name), brand)
+
+
+class _BrandCommand(TyperCommand):
+    def format_help(self, ctx: typer.Context, formatter: Any) -> None:
+        _refresh_login_help(self, ctx)
+        super().format_help(ctx, formatter)
+
+
+class _BrandGroup(TyperGroup):
+    def format_help(self, ctx: typer.Context, formatter: Any) -> None:
+        self.help = _root_help(_help_brand(ctx))
+        super().format_help(ctx, formatter)
+
+
 def _login_banner(url: str) -> str:
-    """Say which platform this login will use. Production stays the default."""
-    name = _named_platform(url)
-    if name == "aifluxx":
-        return f"Logging in to aifluxx (production, {url})."
-    if name == "dev":
-        return f"Logging in to dev ({url})."
+    """Name the developer API this login will use."""
+    named = named_developer_env(url)
+    if named == ("za", "prod"):
+        return f"Logging in to za (production, {url})."
+    if named == ("za", "dev"):
+        return f"Logging in to za dev ({url})."
+    if named == ("truest", "prod"):
+        return f"Logging in to truest (production, {url})."
+    if named == ("truest", "dev"):
+        return f"Logging in to truest dev ({url})."
     return f"Logging in to {url}."
+
+
+def _warn_deprecated_dev(target: ApiTarget) -> None:
+    if target.deprecated_dev:
+        typer.secho(_DEV_PLATFORM_WARNING, err=True, fg="yellow")
 
 
 app = typer.Typer(
     name=_prog(),
+    cls=_BrandGroup,
     no_args_is_help=True,
     add_completion=False,
-    help="Author an agent package and call the AIFluxx API. Signup stays on the developer site.",
+    help=_ZA_ROOT_HELP,
 )
 keys_app = typer.Typer(no_args_is_help=True, help="List, rotate, or revoke developer API keys.")
 app.add_typer(keys_app, name="keys")
@@ -109,10 +222,25 @@ def _die(exc: Exception) -> NoReturn:
     raise typer.Exit(code=1)
 
 
+def _process_url(saved: str) -> str:
+    """Host for a command after login.
+
+    ``AIFLUXX_PLATFORM`` / ``AIFLUXX_ENV`` override the saved URL. Otherwise
+    ``AIFLUXX_API_URL`` overrides it. The config file does not override a login.
+    """
+    if os.environ.get("AIFLUXX_PLATFORM", "").strip() or os.environ.get("AIFLUXX_ENV", "").strip():
+        target = resolve_api_target()
+        _warn_deprecated_dev(target)
+        return target.url
+    override = os.environ.get("AIFLUXX_API_URL", "").strip()
+    if override:
+        return normalize_api_url(override)
+    return saved
+
+
 def _client() -> AifluxxClient:
     creds = load_credentials()
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
+    url = _process_url(creds.url)
     _refuse_dev_key(creds.api_key, url)
     return AifluxxClient(url, api_key=creds.api_key)
 
@@ -121,9 +249,10 @@ def _refuse_dev_key(api_key: str, url: str) -> None:
     """Stop before any HTTP call when an afx_dev_ key targets production."""
     if not dev_key_on_prod_host(api_key, url):
         return
+    how, dev_url = dev_key_hint(url)
     raise AuthError(
         f"Refusing to use an afx_dev_ key against a production host ({url}). "
-        f"Dev keys belong on --platform dev ({PLATFORMS['dev']}). "
+        f"Dev keys belong on {how} ({dev_url}). "
         "No request was sent."
     )
 
@@ -342,7 +471,8 @@ def _read_api_key(api_key: str | None, api_key_stdin: bool) -> str:
         _die(
             AifluxxError(
                 "No API key was provided, and stdin is not a terminal.\n"
-                f"Usage: {_prog()} login (--api-key KEY | --api-key-stdin) [--platform NAME | --url URL]\n"
+                f"Usage: {_prog()} login (--api-key KEY | --api-key-stdin) "
+                "[--platform truest|za] [--env dev|prod] [--url URL]\n"
                 "Pipe a key with --api-key-stdin so the prompt does not read it."
             )
         )
@@ -419,16 +549,23 @@ def currency_for_account(account: object | None) -> str:
 
 
 def _scaffold_api_url() -> str | None:
-    """API root already chosen for this machine, without calling the host.
+    """API root that selects scaffold tool ids, without calling the host.
 
-    ``AIFLUXX_API_URL`` wins, then the saved login URL. None when neither is set.
+    Platform and env env vars win, then ``AIFLUXX_API_URL``, then the saved
+    login URL. With no login, the config file selects the host. None when
+    nothing is set, which scaffolds the ZA ask tool.
     """
+    if os.environ.get("AIFLUXX_PLATFORM", "").strip() or os.environ.get("AIFLUXX_ENV", "").strip():
+        return resolve_api_url()
     override = os.environ.get("AIFLUXX_API_URL", "").strip()
     if override:
         return normalize_api_url(override)
     try:
         return load_credentials().url
     except AuthError:
+        platform, env_name = load_host_config()
+        if platform or env_name:
+            return resolve_api_url()
         return None
 
 
@@ -438,8 +575,7 @@ def _account_for_scaffold() -> dict[str, Any] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
+    url = _process_url(creds.url)
     try:
         return _verify_credentials(url, creds.api_key)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
@@ -478,8 +614,7 @@ def _host_read_tools() -> frozenset[str] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
+    url = _process_url(creds.url)
     _refuse_dev_key(creds.api_key, url)
     try:
         with AifluxxClient(url, api_key=creds.api_key) as client:
@@ -531,7 +666,7 @@ def root(
     ctx.obj["json"] = json_output
 
 
-@app.command()
+@app.command(cls=_BrandCommand)
 def login(
     api_key: str | None = typer.Option(None, "--api-key", help="afx_dev_ key from Home. Prompted if omitted."),
     api_key_stdin: bool = typer.Option(
@@ -542,20 +677,35 @@ def login(
     url: str | None = typer.Option(
         None,
         "--url",
-        help="API root. Overrides --platform and AIFLUXX_API_URL. Default https://api.aifluxx.co.za.",
+        help="API root. Overrides --platform, --env, and the platform environment variables.",
     ),
-    platform: str | None = typer.Option(None, "--platform", help=_platform_help()),
+    platform: str | None = typer.Option(
+        None,
+        "--platform",
+        is_eager=True,
+        callback=_remember_host_flag("platform"),
+        help="Platform: truest or za. aifluxx is an alias of za. dev is a deprecated alias of za dev.",
+    ),
+    env: str | None = typer.Option(
+        None,
+        "--env",
+        is_eager=True,
+        callback=_remember_host_flag("env"),
+        help="Developer environment: dev or prod. Default: prod.",
+    ),
 ) -> None:
     """Check the key with GET /api/dev/me, then save it. Works in any IDE terminal.
 
-    Login defaults to production (platform aifluxx, https://api.aifluxx.co.za).
-    For the dev host, run: aifluxx login --platform dev
+    Pass --platform and --env to choose the developer API. --url overrides that host.
+    --platform dev remains a deprecated alias.
     """
     key = _read_api_key(api_key, api_key_stdin)
     if not (key.startswith("afx_dev_") or key.startswith("afx_live_") or key.startswith("mcpat_")):
         typer.secho("Keys from Home start with afx_dev_. Subscriber keys start with afx_live_.", fg="yellow")
     try:
-        resolved = resolve_api_url(url=url, platform=platform)
+        target = resolve_api_target(url=url, platform=platform, env=env)
+        _warn_deprecated_dev(target)
+        resolved = target.url
         _refuse_dev_key(key, resolved)
     except AifluxxError as exc:
         _die(exc)
@@ -587,7 +737,10 @@ def init_cmd(
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
-    api_url = _scaffold_api_url()
+    try:
+        api_url = _scaffold_api_url()
+    except AifluxxError as exc:
+        _die(exc)
     if list_templates:
         rows = template_rows(api_url=api_url)
         if _as_json(ctx, json_output):

@@ -70,6 +70,20 @@ def test_init_accepts_every_api_alias(tmp_path: Path, monkeypatch, row: dict[str
         assert "truest" not in (tmp_path / slug / "README.md").read_text(encoding="utf-8").lower()
 
 
+def test_init_on_truest_platform_env_writes_that_hosts_ask_tool(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_PLATFORM", "truest")
+    monkeypatch.setenv("AIFLUXX_ENV", "dev")
+    monkeypatch.setenv("AIFLUXX_CONFIG", str(tmp_path / "missing-config.json"))
+    result = runner.invoke(app, ["init", "finance-agent", "-t", "finance"])
+    assert result.exit_code == 0, result.output
+    spec = (tmp_path / "finance-agent" / "spec.yaml").read_text(encoding="utf-8")
+    assert _spec_tools(spec) == ["ask_truest"]
+    assert "aifluxx.co.za" not in result.output
+
+
 def test_init_on_a_truest_host_writes_that_hosts_ask_tool(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))

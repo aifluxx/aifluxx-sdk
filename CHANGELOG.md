@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- `aifluxx login` resolves the developer API host from `--platform` (`truest` or `za`; `aifluxx` is an alias of `za`) and `--env` (`dev` or `prod`). ZA production is `https://developer.aifluxx.co.za`. ZA dev is `https://dev.developer.aifluxx.co.za`. `--platform dev` remains a deprecated alias of ZA dev. `--url` still overrides the named host. `AIFLUXX_PLATFORM`, `AIFLUXX_ENV`, and `~/.aifluxx/config.json` supply the same choice. Help for each platform lists only that platform's hosts.
+
 ### Fixed
 
 - Starter tools and aliases match `GET /api/dev/templates`. `compliance` scaffolds `list_obligations`. `finance` and the document Q&A starter scaffold `ask_assistant`. `standup` and `account-snapshot` no longer add `get_document`. `finance-summariser` and `qa-documents` select those starters, along with `compliance-checklist`. The ask tool id follows the API host.
