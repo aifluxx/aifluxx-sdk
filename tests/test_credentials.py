@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -9,10 +10,10 @@ from aifluxx_sdk.credentials import (
     PLATFORMS,
     Credentials,
     credentials_path,
-    dev_key_on_prod_host,
     load_credentials,
     resolve_api_url,
     save_credentials,
+    _windows_dacl_is_current_user_only,
 )
 from aifluxx_sdk.exceptions import AuthError
 from aifluxx_sdk.lockfile import AgentLock, load_lock, save_lock
@@ -35,15 +36,6 @@ def test_platform_and_url_precedence(monkeypatch):
     assert resolve_api_url(url="https://api.example/root/", platform="dev") == "https://api.example/root"
     with pytest.raises(AuthError, match="Unknown platform"):
         resolve_api_url(platform="nope")
-    assert dev_key_on_prod_host("afx_dev_k", DEFAULT_URL)
-    assert dev_key_on_prod_host("afx_dev_k", "https://api.aifluxx.co.za.")
-    assert dev_key_on_prod_host("afx_dev_k", "https://API.AIFLUXX.CO.ZA./api")
-    assert dev_key_on_prod_host("afx_dev_k", "https://developer.aifluxx.co.za./api")
-    assert not dev_key_on_prod_host("afx_dev_k", DEV_URL)
-    assert not dev_key_on_prod_host("afx_dev_k", "https://dev.developer.aifluxx.co.za.")
-    assert not dev_key_on_prod_host("afx_dev_k", "https://dev.aifluxx.co.za")
-    assert not dev_key_on_prod_host("afx_dev_k", "https://api.example")
-    assert not dev_key_on_prod_host("afx_live_k", DEFAULT_URL)
 
 
 def test_default_store_is_aifluxx_home(tmp_path: Path, monkeypatch):
@@ -58,6 +50,7 @@ def test_aifluxx_credentials_override_wins(tmp_path: Path, monkeypatch):
     assert credentials_path() == tmp_path / "new"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows locks the key with an ACL, not chmod.")
 def test_chmod_0600_failure_raises_and_removes_key(tmp_path: Path, monkeypatch):
     store = tmp_path / "locked" / "credentials"
     real_chmod = Path.chmod
@@ -73,6 +66,7 @@ def test_chmod_0600_failure_raises_and_removes_key(tmp_path: Path, monkeypatch):
     assert not store.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows locks the key with an ACL, not chmod.")
 def test_chmod_0600_that_does_not_stick_raises(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     real_chmod = Path.chmod
@@ -85,6 +79,28 @@ def test_chmod_0600_that_does_not_stick_raises(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(Path, "chmod", chmod)
     with pytest.raises(AuthError, match="did not stick"):
+        save_credentials(Credentials(url=DEFAULT_URL, api_key="afx_dev_secret"), store)
+    assert not store.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL lockdown.")
+def test_windows_save_limits_the_key_to_the_current_user(tmp_path: Path):
+    store = tmp_path / "locked" / "credentials"
+    save_credentials(Credentials(url=DEFAULT_URL, api_key="afx_dev_secret"), store)
+    assert store.is_file()
+    assert _windows_dacl_is_current_user_only(store)
+    assert _windows_dacl_is_current_user_only(store.parent)
+    assert "afx_dev_secret" in store.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL lockdown.")
+def test_windows_acl_failure_removes_the_key(tmp_path: Path, monkeypatch):
+    def denied(path: Path, *, directory: bool) -> None:
+        raise OSError("access denied")
+
+    monkeypatch.setattr("aifluxx_sdk.credentials._restrict_to_current_user", denied)
+    store = tmp_path / "locked" / "credentials"
+    with pytest.raises(AuthError, match="lock down"):
         save_credentials(Credentials(url=DEFAULT_URL, api_key="afx_dev_secret"), store)
     assert not store.exists()
 

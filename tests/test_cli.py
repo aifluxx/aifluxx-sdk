@@ -167,27 +167,29 @@ def _http_factory(seen: list[str]):
     return factory
 
 
-def test_login_refuses_dev_key_on_prod_before_network(tmp_path: Path, monkeypatch):
+def test_login_dev_key_on_production_calls_me(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
     seen: list[str] = []
     monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", _http_factory(seen))
-    result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key"])
+    result = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.aifluxx.co.za"])
     text = _text(result)
-    assert result.exit_code == 1, text
-    assert seen == []
-    assert "production" in text
-    assert "No request was sent" in text
-    assert "Saved" not in text
-    assert not store.exists()
+    assert result.exit_code == 0, text
+    assert seen == ["https://api.aifluxx.co.za/api/dev/me"]
+    assert "No request was sent" not in text
+    assert "Saved" in text
+    assert load_credentials(store).url == "https://api.aifluxx.co.za"
+    assert load_credentials(store).api_key == "afx_dev_test_key"
     explicit = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "aifluxx"])
-    assert explicit.exit_code == 1
-    assert seen == []
-    assert not store.exists()
+    assert explicit.exit_code == 0, explicit.output
+    assert seen == [
+        "https://api.aifluxx.co.za/api/dev/me",
+        "https://api.aifluxx.co.za/api/dev/me",
+    ]
 
 
-def test_verify_and_client_refuse_dev_key_on_prod_before_network(tmp_path: Path, monkeypatch):
+def test_verify_and_client_send_dev_key_to_production(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     store.write_text(
         '{"url": "https://api.aifluxx.co.za", "api_key": "afx_dev_k"}\n',
@@ -197,13 +199,18 @@ def test_verify_and_client_refuse_dev_key_on_prod_before_network(tmp_path: Path,
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
     seen: list[str] = []
     monkeypatch.setattr("aifluxx_sdk.client.httpx.Client", _http_factory(seen))
-    with pytest.raises(AuthError, match="production"):
-        _verify_credentials("https://api.aifluxx.co.za", "afx_dev_k")
-    with pytest.raises(AuthError, match="production"):
-        _verify_credentials("https://developer.aifluxx.co.za", "afx_dev_k")
-    with pytest.raises(AuthError, match="No request was sent"):
-        _client()
-    assert seen == []
+    payload = _verify_credentials("https://api.aifluxx.co.za", "afx_dev_k")
+    assert payload["org"]["name"] == "Acme"
+    client = _client()
+    try:
+        assert client.url == "https://api.aifluxx.co.za"
+        assert client.dev.me()["org"]["name"] == "Acme"
+    finally:
+        client.close()
+    assert seen == [
+        "https://api.aifluxx.co.za/api/dev/me",
+        "https://api.aifluxx.co.za/api/dev/me",
+    ]
 
 
 def test_login_uses_env_url(tmp_path: Path, monkeypatch, allow_login):

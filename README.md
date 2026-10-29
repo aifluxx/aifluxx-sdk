@@ -20,6 +20,13 @@ You need an approved developer account to get an API key. Sign up at https://dev
 
 `aifluxx login` defaults to production: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key.
 
+Keys from Home start with `afx_dev_`. That prefix is the developer key on production and on the dev host. Paste the one Home showed:
+
+```bash
+aifluxx login
+aifluxx login --url https://api.aifluxx.co.za
+```
+
 For the dev host, pass `--platform dev`:
 
 ```bash
@@ -27,15 +34,7 @@ aifluxx login --platform dev
 aifluxx login --platform dev --api-key afx_dev_…
 ```
 
-Production is the default, so this logs into `aifluxx`:
-
-```bash
-aifluxx login --api-key afx_live_…
-```
-
-`login` calls `GET /api/dev/me` before it writes the credentials file. A rejected key or an unreachable host prints the error and does not say `Saved`.
-
-An `afx_dev_` key aimed at a production host (`api.aifluxx.co.za` or `developer.aifluxx.co.za`) is refused before any request, including the login check and later commands. Nothing is saved. Dev keys belong on `--platform dev`.
+`login` calls `GET /api/dev/me` before it writes the credentials file. A rejected key or an unreachable host prints the error and does not say `Saved`. A key created on one host does not verify on the other.
 
 Pipe a key with `--api-key-stdin`. That reads stdin directly, so `getpass` is not used and Python does not emit `GetPassWarning`:
 
@@ -46,7 +45,7 @@ printf '%s' "$AIFLUXX_API_KEY" | aifluxx login --api-key-stdin --platform dev
 Override the host for this login with `--url`, or for every command in the current process with `AIFLUXX_API_URL`:
 
 ```bash
-aifluxx login --url https://api.aifluxx.co.za --api-key afx_live_…
+aifluxx login --url https://api.aifluxx.co.za --api-key afx_dev_…
 export AIFLUXX_API_URL=https://dev.developer.aifluxx.co.za
 ```
 
@@ -63,10 +62,10 @@ Named platforms:
 
 ```bash
 aifluxx login --platform dev
-aifluxx login --platform aifluxx --api-key afx_live_…
+aifluxx login --platform aifluxx --api-key afx_dev_…
 ```
 
-Credentials are written to `~/.aifluxx/credentials` (mode `0600`, directory `0700`). If `chmod` fails, or the mode does not stick, login stops and the new key file is removed. The override for the path is `AIFLUXX_CREDENTIALS`. The file stays on your machine. Do not commit it.
+Credentials are written to `~/.aifluxx/credentials`. On macOS and Linux the file is mode `0600` and the directory is mode `0700`. On Windows the file and its folder allow only the current user. If that lock cannot be set, login stops and the new key file is removed. The override for the path is `AIFLUXX_CREDENTIALS`. The file stays on your machine. Do not commit it.
 
 ## Author a package
 

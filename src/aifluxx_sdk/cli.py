@@ -14,7 +14,6 @@ from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.credentials import (
     PLATFORMS,
     Credentials,
-    dev_key_on_prod_host,
     load_credentials,
     normalize_api_url,
     resolve_api_url,
@@ -113,19 +112,7 @@ def _client() -> AifluxxClient:
     creds = load_credentials()
     override = os.environ.get("AIFLUXX_API_URL", "").strip()
     url = normalize_api_url(override) if override else creds.url
-    _refuse_dev_key(creds.api_key, url)
     return AifluxxClient(url, api_key=creds.api_key)
-
-
-def _refuse_dev_key(api_key: str, url: str) -> None:
-    """Stop before any HTTP call when an afx_dev_ key targets production."""
-    if not dev_key_on_prod_host(api_key, url):
-        return
-    raise AuthError(
-        f"Refusing to use an afx_dev_ key against a production host ({url}). "
-        f"Dev keys belong on --platform dev ({PLATFORMS['dev']}). "
-        "No request was sent."
-    )
 
 
 def _package_dir(path: Path | None) -> Path:
@@ -466,7 +453,6 @@ def _account_label(payload: object) -> str | None:
 
 
 def _verify_credentials(url: str, api_key: str) -> dict[str, Any]:
-    _refuse_dev_key(api_key, url)
     with AifluxxClient(url, api_key=api_key) as client:
         payload = client.dev.me()
     return payload if isinstance(payload, dict) else {}
@@ -480,7 +466,6 @@ def _host_read_tools() -> frozenset[str] | None:
         return None
     override = os.environ.get("AIFLUXX_API_URL", "").strip()
     url = normalize_api_url(override) if override else creds.url
-    _refuse_dev_key(creds.api_key, url)
     try:
         with AifluxxClient(url, api_key=creds.api_key) as client:
             names = client.dev.read_tool_names()
@@ -556,7 +541,6 @@ def login(
         typer.secho("Keys from Home start with afx_dev_. Subscriber keys start with afx_live_.", fg="yellow")
     try:
         resolved = resolve_api_url(url=url, platform=platform)
-        _refuse_dev_key(key, resolved)
     except AifluxxError as exc:
         _die(exc)
     typer.echo(_login_banner(resolved))
