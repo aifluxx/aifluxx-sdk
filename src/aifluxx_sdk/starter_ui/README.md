@@ -29,7 +29,7 @@ Any one of these works (first match wins):
 2. `cp .env.example .env.local` and set `AIFLUXX_API_KEY=afx_dev_…`.
 3. `AIFLUXX_API_KEY=afx_dev_… npm run dev`.
 
-Restart `npm run dev`, then open **Settings** to check the key against `/api/dev/me`. Optional `AIFLUXX_API_URL` overrides the API root (default `https://api.aifluxx.co.za`).
+Restart `npm run dev`, then open **Settings** to check the key against `/api/dev/me`. The API root is `AIFLUXX_API_URL` when that is set, otherwise the URL saved by `aifluxx login`, otherwise `https://api.aifluxx.co.za`. The MCP snippet is that root plus `/mcp/`.
 
 To see your agent's tools, put its `spec.yaml` in the project root (or run from your package directory).
 

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { isAllowed } from "./allowlist.js";
 import { classifyTools, CONNECTORS, publicToolId } from "./catalog.js";
-import { maskKey, MCP_URL, type ProxyConfig } from "./config.js";
+import { maskKey, mcpUrlFor, type ProxyConfig } from "./config.js";
 import { MOCK_AGENTS, MOCK_KEYS, MOCK_ME, MOCK_RUN_LINES, MOCK_SPEC } from "./fixtures.js";
 
 export interface AppOptions {
@@ -25,7 +25,7 @@ export function createApp({ config, fetchImpl = fetch, specPath, mockDelayMs = 2
       apiRoot: config.mock ? null : config.apiRoot,
       keyMasked: config.mock ? null : maskKey(config.apiKey),
       keySource: config.mock ? null : config.keySource,
-      mcpUrl: MCP_URL,
+      mcpUrl: mcpUrlFor(config.apiRoot),
     }),
   );
 
@@ -54,7 +54,7 @@ export function createApp({ config, fetchImpl = fetch, specPath, mockDelayMs = 2
     if (!isAllowed(method, path)) {
       return c.json({ error: "not_allowed", detail: `${method} ${path} is not on the starter UI allow-list.` }, 403);
     }
-    if (config.mock) return mockRoute(method, path, c.req.raw, mockDelayMs);
+    if (config.mock) return mockRoute(method, path, c.req.raw, mockDelayMs, config.apiRoot);
 
     const target = `${config.apiRoot}${path}${url.search}`;
     const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}`, Accept: c.req.header("accept") ?? "*/*" };
@@ -102,7 +102,7 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-async function mockRoute(method: string, path: string, req: Request, delay: number): Promise<Response> {
+async function mockRoute(method: string, path: string, req: Request, delay: number, apiRoot: string): Promise<Response> {
   if (path === "/api/dev/me") return json(MOCK_ME);
   if (path === "/api/dev/agents") return json(MOCK_AGENTS);
   if (path === "/api/dev/keys") return json(MOCK_KEYS);
@@ -119,8 +119,10 @@ async function mockRoute(method: string, path: string, req: Request, delay: numb
     const p = prompt.toLowerCase();
     if (p.includes("401")) return json({ detail: "Invalid or expired developer key. Sign in again." }, 401);
     if (p.includes("500")) return json({ detail: "Internal server error (simulated)." }, 500);
-    if (p.includes("307"))
-      return json({ error: "redirect_blocked", upstreamStatus: 307, location: "http://api.aifluxx.co.za/mcp", downgrade: true, detail: "The API tried to redirect to plain http (TLS downgrade). Not followed." }, 502);
+    if (p.includes("307")) {
+      const httpRoot = apiRoot.replace(/^https:\/\//, "http://");
+      return json({ error: "redirect_blocked", upstreamStatus: 307, location: `${httpRoot}/mcp`, downgrade: true, detail: "The API tried to redirect to plain http (TLS downgrade). Not followed." }, 502);
+    }
     const enc = new TextEncoder();
     const stream = new ReadableStream({
       async start(ctrl) {

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -111,9 +110,7 @@ def _die(exc: Exception) -> NoReturn:
 
 def _client() -> AifluxxClient:
     creds = load_credentials()
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
-    return AifluxxClient(url, api_key=creds.api_key)
+    return AifluxxClient(api_key=creds.api_key)
 
 
 def _package_dir(path: Path | None) -> Path:
@@ -406,18 +403,13 @@ def currency_for_account(account: object | None) -> str:
     return "USD"
 
 
-def _scaffold_api_url() -> str | None:
-    """API root already chosen for this machine, without calling the host.
+def _scaffold_api_url() -> str:
+    """API root for template tool ids. Does not call the host.
 
-    ``AIFLUXX_API_URL`` wins, then the saved login URL. None when neither is set.
+    Same order as every other command: ``AIFLUXX_API_URL``, then the saved
+    login URL, then production.
     """
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    if override:
-        return normalize_api_url(override)
-    try:
-        return load_credentials().url
-    except AuthError:
-        return None
+    return resolve_api_url()
 
 
 def _account_for_scaffold() -> dict[str, Any] | None:
@@ -426,10 +418,8 @@ def _account_for_scaffold() -> dict[str, Any] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
     try:
-        return _verify_credentials(url, creds.api_key)
+        return _verify_credentials(resolve_api_url(), creds.api_key)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         typer.secho(f"Could not read the org currency ({exc}). Using USD.", err=True, fg="yellow")
         return None
@@ -465,8 +455,7 @@ def _host_read_tools() -> frozenset[str] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
+    url = resolve_api_url()
     try:
         with AifluxxClient(url, api_key=creds.api_key) as client:
             names = client.dev.read_tool_names()
@@ -528,7 +517,10 @@ def login(
     url: str | None = typer.Option(
         None,
         "--url",
-        help="API root. Overrides --platform and AIFLUXX_API_URL. Default https://api.aifluxx.co.za.",
+        help=(
+            "API root. Overrides --platform, AIFLUXX_API_URL, and the saved login URL. "
+            "Default https://api.aifluxx.co.za."
+        ),
     ),
     platform: str | None = typer.Option(None, "--platform", help=_platform_help()),
 ) -> None:

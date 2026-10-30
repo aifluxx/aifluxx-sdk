@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aifluxx_sdk.cli import _client, _verify_credentials, app, currency_for_account
-from aifluxx_sdk.credentials import load_credentials
+from aifluxx_sdk.credentials import DEV_URL, load_credentials
 from aifluxx_sdk.exceptions import AuthError
 
 # GitHub Actions sets GITHUB_ACTIONS, and Typer then forces a colour terminal.
@@ -222,6 +222,34 @@ def test_login_uses_env_url(tmp_path: Path, monkeypatch, allow_login):
     assert load_credentials(store).url == "https://api.example"
 
 
+def test_saved_dev_login_url_is_reused(tmp_path: Path, monkeypatch, allow_login):
+    store = tmp_path / "credentials"
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    logged_in = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", DEV_URL])
+    assert logged_in.exit_code == 0, logged_in.output
+    assert load_credentials(store).url == DEV_URL
+    client = _client()
+    try:
+        assert client.url == DEV_URL
+        assert client.mcp_url == f"{DEV_URL}/mcp/"
+    finally:
+        client.close()
+    monkeypatch.setenv("AIFLUXX_API_URL", "https://api.override")
+    overridden = _client()
+    try:
+        assert overridden.url == "https://api.override"
+        assert overridden.mcp_url == "https://api.override/mcp/"
+    finally:
+        overridden.close()
+    explicit = runner.invoke(
+        app,
+        ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"],
+    )
+    assert explicit.exit_code == 0, explicit.output
+    assert load_credentials(store).url == "https://api.example"
+
+
 def test_env_url_overrides_saved_credentials(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     store.write_text('{"url": "https://api.saved", "api_key": "afx_dev_k"}\n', encoding="utf-8")
@@ -433,6 +461,8 @@ def test_readme_install_dev_login_and_brand():
     assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
     assert "aifluxx-sdk @ git+" not in readme
     assert "aifluxx login --platform dev" in readme
+    assert "dev.developer.aifluxx.co.za/mcp/" in readme
+    assert "AIFLUXX_API_URL" in readme
     assert "AIFluxx" in readme
     assert "AIfluxx" not in readme
 

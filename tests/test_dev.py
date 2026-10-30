@@ -341,6 +341,23 @@ def test_307_to_http_is_reported():
     text = str(caught.value)
     assert "307" in text
     assert "downgrad" in text
+    assert "https://api.aifluxx.co.za/mcp/" in text
+
+
+def test_307_mcp_hint_follows_the_api_host():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        307,
+        headers={"location": "http://dev.developer.aifluxx.co.za/mcp/"},
+        method="GET",
+        url="https://dev.developer.aifluxx.co.za/mcp",
+    )
+    client = DevClient(http, "https://dev.developer.aifluxx.co.za")
+    with pytest.raises(AifluxxError, match="https://dev.developer.aifluxx.co.za/mcp/") as caught:
+        client.me()
+    text = str(caught.value)
+    assert "downgrad" in text
+    assert "https://api.aifluxx.co.za/mcp/" not in text
 
 
 class _Unread:

@@ -26,7 +26,11 @@ def normalize_api_url(url: str) -> str:
 
 
 def resolve_api_url(*, url: str | None = None, platform: str | None = None) -> str:
-    """Pick an API root: `--url`, then `--platform`, then `AIFLUXX_API_URL`, then the default."""
+    """Pick an API root.
+
+    Precedence: explicit ``url``, then ``platform``, then ``AIFLUXX_API_URL``,
+    then the URL saved by ``aifluxx login``, then production.
+    """
     if url is not None and url.strip():
         return normalize_api_url(url)
     if platform is not None and platform.strip():
@@ -38,7 +42,31 @@ def resolve_api_url(*, url: str | None = None, platform: str | None = None) -> s
     env = os.environ.get("AIFLUXX_API_URL", "").strip()
     if env:
         return normalize_api_url(env)
+    saved = _saved_api_url()
+    if saved:
+        return saved
     return DEFAULT_URL
+
+
+def mcp_url(api_base: str | None = None) -> str:
+    """MCP endpoint for an API root. The trailing slash is required.
+
+    ``api_base`` is used as given. When it is omitted, the base is
+    ``resolve_api_url()`` (env, saved login, then production).
+    """
+    if api_base is None:
+        base = resolve_api_url()
+    else:
+        base = normalize_api_url(api_base) or resolve_api_url()
+    return f"{base}/mcp/"
+
+
+def _saved_api_url() -> str | None:
+    """URL from the credentials file, or None when that file cannot be read."""
+    try:
+        return load_credentials().url
+    except AuthError:
+        return None
 
 
 def credentials_path() -> Path:

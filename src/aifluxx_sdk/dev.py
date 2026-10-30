@@ -7,11 +7,12 @@ import re
 import tarfile
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
 from aifluxx_sdk.catalog import parse_tool_catalogue
+from aifluxx_sdk.credentials import mcp_url
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
 from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
@@ -213,9 +214,20 @@ def _redirect_message(res: httpx.Response) -> str:
     message = f"{where}: redirects to {target}."
     if location.startswith("http://"):
         message += " The Location URL is http, so the host is downgrading TLS."
-    if "/mcp" in str(getattr(getattr(res, "request", None), "url", "")) or "/mcp" in location:
-        message += " For MCP, use the https URL exactly as shown: https://api.aifluxx.co.za/mcp/"
+    request_url = str(getattr(getattr(res, "request", None), "url", "") or "")
+    if "/mcp" in request_url or "/mcp" in location:
+        hinted = _mcp_hint(location if "/mcp" in location else request_url)
+        if hinted:
+            message += f" For MCP, use the https URL exactly as shown: {hinted}"
     return message
+
+
+def _mcp_hint(raw: str) -> str | None:
+    """HTTPS MCP URL for the host in ``raw``. None when ``raw`` has no host."""
+    netloc = urlsplit(raw).netloc
+    if not netloc:
+        return None
+    return mcp_url(f"https://{netloc}")
 
 
 def _detail(res: httpx.Response) -> str:

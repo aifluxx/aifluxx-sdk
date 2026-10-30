@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- The API root follows an explicit URL, then `AIFLUXX_API_URL`, then the URL saved by `aifluxx login`, then `https://api.aifluxx.co.za`. A dev host saved with `aifluxx login --url` is reused when the environment variable is unset. MCP URLs are that API root plus `/mcp/`.
 - `aifluxx login` sends a Home key (`afx_dev_`) to `https://api.aifluxx.co.za` and checks it with `GET /api/dev/me`. The prefix is the developer key on production and on the dev host. A key for the wrong host is rejected by that check and is not saved.
 - On Windows, login saves the key. The credentials file and its folder are limited to the current user. Unix modes are not how Windows records that, so the old mode check rejected every save.
 - Starter tools and aliases match `GET /api/dev/templates`. `compliance` scaffolds `list_obligations`. `finance` and the document Q&A starter scaffold `ask_assistant`. `standup` and `account-snapshot` no longer add `get_document`. `finance-summariser` and `qa-documents` select those starters, along with `compliance-checklist`. The ask tool id follows the API host.
