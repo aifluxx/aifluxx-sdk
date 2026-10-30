@@ -29,7 +29,8 @@ def test_default_url_is_aifluxx(monkeypatch, tmp_path: Path):
     assert mcp_url() == f"{DEFAULT_URL}/mcp/"
     assert set(PLATFORMS) == {"aifluxx", "dev"}
     assert PLATFORMS["aifluxx"] == DEFAULT_URL
-    assert PLATFORMS["dev"] == DEV_URL
+    assert DEV_URL == "https://dev.aifluxx.co.za"
+    assert PLATFORMS["dev"] == "https://dev.aifluxx.co.za"
 
 
 def test_platform_and_url_precedence(monkeypatch, tmp_path: Path):

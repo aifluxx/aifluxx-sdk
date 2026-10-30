@@ -344,6 +344,52 @@ def test_keys_list_rotate_revoke(tmp_path: Path, monkeypatch):
     assert "revoked" in _text(revoked).lower()
 
 
+def test_keys_create_shows_the_secret_once(tmp_path: Path, monkeypatch):
+    store = tmp_path / "credentials"
+    store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    seen: dict[str, str | None] = {}
+
+    class _Dev:
+        def create_key(self, name=None):
+            seen["name"] = name
+            return {
+                "id": "k9",
+                "name": name or "Sandbox key",
+                "prefix": "afx_dev_",
+                "key_once": "afx_dev_created_secret",
+                "key_hash": "not-the-secret",
+            }
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    created = runner.invoke(app, ["keys", "create", "--name", "laptop", "--save"])
+    text = _text(created)
+    assert created.exit_code == 0, text
+    assert seen["name"] == "laptop"
+    assert text.count("afx_dev_created_secret") == 1
+    assert "shown once" in text
+    assert "not-the-secret" not in text
+    assert "key_once" not in text
+    assert load_credentials(store).api_key == "afx_dev_created_secret"
+    raw = runner.invoke(app, ["keys", "create", "--json"])
+    assert raw.exit_code == 0, raw.output
+    assert seen["name"] is None
+    assert raw.output.count("afx_dev_created_secret") == 1
+    assert "key_once" not in raw.output
+    assert "key_hash" not in raw.output
+    assert '"id": "k9"' in raw.output
+
+
 def test_run_reads_slug_from_package_or_argument(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
@@ -430,6 +476,40 @@ def test_run_exits_nonzero_when_final_state_failed_or_errored(tmp_path: Path, mo
     bare = runner.invoke(app, ["run", "my-agent", "hello"])
     assert bare.exit_code == 1
     assert "Run failed." in _text(bare)
+
+
+def test_run_without_prompt_prints_usage_or_reads_stdin(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    missing = runner.invoke(app, ["run"])
+    text = _text(missing)
+    assert missing.exit_code == 1
+    assert "Usage:" in text
+    assert "PROMPT" in text
+    assert "stdin" in text
+    created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
+    assert created.exit_code == 0, created.output
+    monkeypatch.chdir(tmp_path / "my-agent")
+    seen: dict[str, str] = {}
+
+    class _Dev:
+        def run(self, slug, prompt, *, version=None, lock=None):
+            seen["slug"] = slug
+            seen["prompt"] = prompt
+            yield "ok"
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    piped = runner.invoke(app, ["run"], input="piped prompt\n")
+    assert piped.exit_code == 0, piped.output
+    assert seen == {"slug": "my-agent", "prompt": "piped prompt"}
 
 
 def test_run_outside_package_requires_slug(tmp_path: Path, monkeypatch):

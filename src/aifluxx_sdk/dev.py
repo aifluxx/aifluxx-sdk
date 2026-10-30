@@ -138,6 +138,18 @@ class DevClient:
     def list_keys(self) -> Any:
         return self._json(self._http.get(f"{self._api_root}/api/dev/keys"))
 
+    def create_key(self, name: str | None = None) -> Any:
+        """POST /api/dev/keys. ``name`` defaults to Sandbox key on the server. Max 80 characters."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            cleaned = name.strip()
+            if not cleaned:
+                raise AifluxxError("Enter a name for this key.")
+            if len(cleaned) > 80:
+                raise AifluxxError("Key name must be 80 characters or fewer.")
+            body["name"] = cleaned
+        return self._json(self._http.post(f"{self._api_root}/api/dev/keys", json=body))
+
     def rotate_key(self, key_id: str) -> Any:
         return self._json(self._http.post(self._key_path(key_id, "rotate")))
 

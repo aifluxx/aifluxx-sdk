@@ -93,6 +93,14 @@ def test_keys_call_dev_paths():
     http.post.assert_called_with("https://api.example/api/dev/keys/k1/rotate")
     client.revoke_key("k1")
     http.post.assert_called_with("https://api.example/api/dev/keys/k1/revoke")
+    client.create_key("laptop")
+    http.post.assert_called_with("https://api.example/api/dev/keys", json={"name": "laptop"})
+    client.create_key()
+    http.post.assert_called_with("https://api.example/api/dev/keys", json={})
+    with pytest.raises(AifluxxError, match="80"):
+        client.create_key("x" * 81)
+    with pytest.raises(AifluxxError, match="name"):
+        client.create_key("   ")
 
 
 def test_key_id_rejects_slash():

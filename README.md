@@ -96,7 +96,7 @@ aifluxx submit
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
 
-`run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API.
+`run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API. With no prompt, `aifluxx run` reads one prompt from stdin. In a terminal, no prompt prints usage and exits 1.
 
 `submit` and `run` call `/api/dev/agents/{slug}/versions/{version_id}/...`. `version_id` is a UUID. The CLI does not send the word `latest` or a semver such as `0.1.0` in that path. It uses the UUID saved at push, or looks the slug up with `GET /api/dev/agents`. Pass `--version <uuid>` to choose one yourself. A semver passed to `--version` is looked up, not sent as the path id.
 
@@ -134,10 +134,11 @@ Sign up for a developer account at https://developer.aifluxx.co.za/signup. For h
 | Command | Request |
 |---|---|
 | `aifluxx keys list` | `GET /api/dev/keys` |
+| `aifluxx keys create` | `POST /api/dev/keys` |
 | `aifluxx keys rotate <id>` | `POST /api/dev/keys/{id}/rotate` |
 | `aifluxx keys revoke <id>` | `POST /api/dev/keys/{id}/revoke` |
 
-List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Rotate prints a new secret once. `--save` on rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
+List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Create and rotate print the new secret once (`key_once`); it is left out of the text view and the JSON payload. `--name` on create sets the name (at most 80 characters). Omit it and the API uses `Sandbox key`. `--save` on create or rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
 
 ## Python
 
