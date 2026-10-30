@@ -37,14 +37,16 @@ def sync(source: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ref", default="main")
+    parser.add_argument("--ref", default="main", help="Branch, tag, or commit SHA.")
     parser.add_argument("--source", type=Path, help="Existing checkout to copy from instead of cloning.")
     args = parser.parse_args()
     if args.source:
         sha = sync(args.source.resolve())
     else:
         with tempfile.TemporaryDirectory() as tmp:
-            subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", args.ref, UPSTREAM, tmp], check=True)
+            # --ref may be a branch, tag, or commit SHA.
+            subprocess.run(["git", "clone", "-q", UPSTREAM, tmp], check=True)
+            subprocess.run(["git", "checkout", "-q", "--detach", args.ref], cwd=tmp, check=True)
             sha = sync(Path(tmp))
     print(f"Vendored starter UI at {sha} into {DEST}")
 
