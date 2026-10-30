@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `aifluxx starter-ui [DEST]` copies the bundled AIFluxx Starter UI into a folder. The UI ships inside the wheel and sdist, so no separate download is needed.
+
 ### Fixed
 
 - `aifluxx login` sends a Home key (`afx_dev_`) to `https://api.aifluxx.co.za` and checks it with `GET /api/dev/me`. The prefix is the developer key on production and on the dev host. A key for the wrong host is rejected by that check and is not saved.
