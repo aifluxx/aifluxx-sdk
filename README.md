@@ -18,7 +18,7 @@ You need an approved developer account to get an API key. Sign up at https://dev
 
 ## Log in
 
-`aifluxx login` uses production when no other host is set: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key. A URL already saved in the credentials file is used before that default, so `aifluxx login --url https://dev.developer.aifluxx.co.za` keeps later commands on the dev host. Pass `--platform aifluxx` or `--url https://api.aifluxx.co.za` to save production again.
+`aifluxx login` uses production when no other host is set: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key. A URL already saved in the credentials file is used before that default, so `aifluxx login --url https://dev.aifluxx.co.za` keeps later commands on the dev host. Pass `--platform aifluxx` or `--url https://api.aifluxx.co.za` to save production again.
 
 Keys from Home start with `afx_dev_`. That prefix is the developer key on production and on the dev host. Paste the one Home showed:
 
@@ -46,19 +46,19 @@ Override the host for this login with `--url`, or for every command in the curre
 
 ```bash
 aifluxx login --url https://api.aifluxx.co.za --api-key afx_dev_â€¦
-export AIFLUXX_API_URL=https://dev.developer.aifluxx.co.za
+export AIFLUXX_API_URL=https://dev.aifluxx.co.za
 ```
 
-The API root is chosen in this order: `--url` (or the `url` argument to `AifluxxClient`), then `--platform`, then `AIFLUXX_API_URL`, then the URL saved in `~/.aifluxx/credentials`, then `https://api.aifluxx.co.za`. When `AIFLUXX_API_URL` is unset, later commands use the saved login URL, including a dev host from `aifluxx login --url https://dev.developer.aifluxx.co.za` or `aifluxx login --platform dev`.
+The API root is chosen in this order: `--url` (or the `url` argument to `AifluxxClient`), then `--platform`, then `AIFLUXX_API_URL`, then the URL saved in `~/.aifluxx/credentials`, then `https://api.aifluxx.co.za`. When `AIFLUXX_API_URL` is unset, later commands use the saved login URL, including a dev host from `aifluxx login --url https://dev.aifluxx.co.za` or `aifluxx login --platform dev`.
 
 Named platforms:
 
 | `--platform` | API root |
 |---|---|
 | `aifluxx` | `https://api.aifluxx.co.za` |
-| `dev` | `https://dev.developer.aifluxx.co.za` |
+| `dev` | `https://dev.aifluxx.co.za` |
 
-`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `aifluxx` is production. Any other host is a custom `--url`.
+`dev` is the dev API at `https://dev.aifluxx.co.za`. `aifluxx` is production. Any other host is a custom `--url`.
 
 ```bash
 aifluxx login --platform dev
@@ -170,7 +170,7 @@ Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_â€
 
 ## MCP
 
-MCP clients talk to the host. This package does not embed an MCP server. The MCP URL is the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.developer.aifluxx.co.za/mcp/`. `AifluxxClient.mcp_url` returns that URL for the client.
+MCP clients talk to the host. This package does not embed an MCP server. The MCP URL is the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.aifluxx.co.za/mcp/`. `AifluxxClient.mcp_url` returns that URL for the client.
 
 ```json
 {

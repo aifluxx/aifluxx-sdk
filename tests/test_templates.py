@@ -17,7 +17,7 @@ from tests.api_template_contract import API_TEMPLATES, tools_for_host
 runner = CliRunner()
 
 _TRUEST_URL = "https://api.truest.ae"
-_AIFLUXX_URLS = (None, "https://api.aifluxx.co.za", "https://dev.developer.aifluxx.co.za", "https://api.truest.example")
+_AIFLUXX_URLS = (None, "https://api.aifluxx.co.za", "https://dev.aifluxx.co.za", "https://api.truest.example")
 
 
 def _spec_tools(text: str) -> list[str]:

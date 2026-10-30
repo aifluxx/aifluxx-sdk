@@ -461,7 +461,7 @@ def test_readme_install_dev_login_and_brand():
     assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
     assert "aifluxx-sdk @ git+" not in readme
     assert "aifluxx login --platform dev" in readme
-    assert "dev.developer.aifluxx.co.za/mcp/" in readme
+    assert "dev.aifluxx.co.za/mcp/" in readme
     assert "AIFLUXX_API_URL" in readme
     assert "AIFluxx" in readme
     assert "AIfluxx" not in readme
@@ -474,7 +474,7 @@ def test_login_help_lists_dev_platform_and_stdin():
     assert "--platform" in text
     assert "--api-key-stdin" in text
     flat = _flat(text)
-    assert "dev.developer.aifluxx.co.za" in flat
+    assert "dev.aifluxx.co.za" in flat
     assert "aifluxx (https://api.aifluxx.co.za)" in flat
     assert "aifluxx login --platform dev" in flat
     assert "production" in flat.lower()
@@ -490,7 +490,7 @@ def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     dev_text = _text(dev)
     assert dev.exit_code == 0, dev_text
-    assert "Logging in to dev (https://dev.developer.aifluxx.co.za)." in dev_text
+    assert "Logging in to dev (https://dev.aifluxx.co.za)." in dev_text
     assert "production" not in dev_text
     custom = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"])
     custom_text = _text(custom)
@@ -504,7 +504,7 @@ def test_login_platform_dev(tmp_path: Path, monkeypatch, allow_login):
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     assert dev.exit_code == 0, dev.output
-    assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
+    assert load_credentials(store).url == "https://dev.aifluxx.co.za"
     assert "production" not in _text(dev)
     assert "Saved" in _text(dev)
 
