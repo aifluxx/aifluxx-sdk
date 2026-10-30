@@ -45,7 +45,12 @@ a2a = ["a2a-sdk>=1.1,<2"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-aifluxx_sdk = ["py.typed"]
+aifluxx_sdk = [
+  "py.typed",
+  "starter_ui/**/*",
+  "starter_ui/.env.example",
+  "starter_ui/.gitignore",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

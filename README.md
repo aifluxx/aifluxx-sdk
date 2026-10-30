@@ -112,6 +112,17 @@ aifluxx keys revoke <key-id>
 
 After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is filled from the push response: an explicit `version_id`, the id on the nested version object, or the response `id` when `version` is the semver that was just uploaded (that object also includes the package slug). It stays `null` when the response has no version UUID. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
 
+## Starter UI
+
+The SDK ships the [AIFluxx Starter UI](https://github.com/aifluxx/aifluxx-starter-ui), a local developer console for agent packages. Copy it out and run it with Node 20+:
+
+```bash
+aifluxx starter-ui my-console   # defaults to ./aifluxx-starter-ui
+cd my-console && npm install && npm run dev
+```
+
+The command refuses a non-empty folder unless you pass `--force`. The bundled upstream commit is recorded in `aifluxx_sdk/starter_ui/UPSTREAM`; maintainers refresh it with `python scripts/sync_starter_ui.py`.
+
 ## Getting a developer key
 
 Sign up for a developer account at https://developer.aifluxx.co.za/signup. For help or access questions, contact developer@aifluxx.com.

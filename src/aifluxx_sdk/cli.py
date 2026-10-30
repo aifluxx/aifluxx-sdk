@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
@@ -908,6 +909,26 @@ def keys_revoke(
         typer.echo(f"Revoked {payload.get('id') or key_id}.")
         return
     _emit(payload, as_json=False)
+
+
+STARTER_UI_DIR = Path(__file__).resolve().parent / "starter_ui"
+
+
+@app.command("starter-ui")
+def starter_ui_cmd(
+    dest: Path = typer.Argument(Path("aifluxx-starter-ui"), help="Folder to create. Defaults to ./aifluxx-starter-ui."),
+    force: bool = typer.Option(False, "--force", "-f", help="Write into a non-empty folder, overwriting files."),
+) -> None:
+    """Copy the bundled AIFluxx Starter UI (local developer console) into DEST."""
+    if not STARTER_UI_DIR.is_dir():
+        _die(AifluxxError("The starter UI is missing from this install. Reinstall aifluxx-sdk."))
+    root = dest.resolve()
+    if root.exists() and not root.is_dir():
+        _die(AifluxxError(f"{root} exists and is not a folder."))
+    if root.exists() and any(root.iterdir()) and not force:
+        _die(AifluxxError(f"{root} already exists and is not empty. Pass --force to overwrite."))
+    shutil.copytree(STARTER_UI_DIR, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "UPSTREAM"))
+    typer.echo(f"Created {root}. Next: cd {dest} && npm install && npm run dev")
 
 
 def main() -> None:
