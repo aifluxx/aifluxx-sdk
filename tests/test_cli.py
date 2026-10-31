@@ -536,6 +536,20 @@ def test_help_lists_login():
     assert "AIfluxx" not in text
 
 
+def test_version_flag_prints_sdk_version():
+    import tomllib
+
+    from aifluxx_sdk import __version__
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    declared = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    assert declared == "1.1.0"
+    assert __version__ == "1.1.0"
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0, _text(result)
+    assert _text(result).strip() == "1.1.0"
+
+
 def test_readme_install_dev_login_and_brand():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme

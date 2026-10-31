@@ -12,7 +12,7 @@ Requires Python 3.11 or newer. The package is not on PyPI; install it from GitHu
 pip install git+https://github.com/aifluxx/aifluxx-sdk
 ```
 
-To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v0.1.0`.
+To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.1.0`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 

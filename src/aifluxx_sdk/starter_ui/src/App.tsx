@@ -43,7 +43,7 @@ export function App() {
           <p className="nav-group">Console</p>
           {TABS.map((t) => <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>{t}</button>)}
         </nav>
-        <footer>AIFluxx Starter Console v0.1 · Questions: <a href="mailto:developer@aifluxx.com">developer@aifluxx.com</a></footer>
+        <footer>AIFluxx Starter Console v1.1.0 · Questions: <a href="mailto:developer@aifluxx.com">developer@aifluxx.com</a></footer>
       </aside>
       <div className="content">
         <header className="topbar">

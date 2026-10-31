@@ -16,7 +16,7 @@ from aifluxx_sdk.exceptions import (
 try:
     __version__ = version("aifluxx-sdk")
 except PackageNotFoundError:
-    __version__ = "0.1.0"
+    __version__ = "1.1.0"
 
 __all__ = [
     "AifluxxClient",

@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-31
+
 ### Added
 
+- `aifluxx --version` prints the SDK version.
 - `aifluxx starter-ui [DEST]` copies the bundled AIFluxx Starter UI into a folder. The UI ships inside the wheel and sdist, so no separate download is needed.
 
 ### Fixed
