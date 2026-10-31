@@ -17,9 +17,9 @@ Optionally create and activate a virtual environment, then install into it. Skip
 - bash: `python -m venv .venv` then `source .venv/bin/activate`
 - Windows PowerShell: `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
 
-Install aifluxx 1.2.0:
+Install aifluxx 1.3.0:
 
-pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.2.0
+pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.0
 
 Run `aifluxx login`. Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there.
 
@@ -140,7 +140,7 @@ aifluxx-sdk/
 
 That tree is the installed version: package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. `setup.py` and `MANIFEST.in` are the packaging files that put this tree in the wheel. To work on the SDK itself and keep git history, use the clone and editable install above.
 
-To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.2.0`.
+To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.0`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
