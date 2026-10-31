@@ -33,6 +33,12 @@ Restart `npm run dev`, then open **Settings** to check the key against `/api/dev
 
 To see your agent's tools, put its `spec.yaml` in the project root (or run from your package directory).
 
+## Layout edit
+
+The top bar has a **Layout edit** toggle. It is on when you open `http://127.0.0.1:5173/?layout=1` or start with `AIFLUXX_LAYOUT_EDIT=1`. Drag a block onto another to reorder it, and drag the corner handle to resize it on a 12-column grid. **Save layout** writes `aifluxx.layout.json` in `AIFLUXX_PROJECT` (or the current directory). The JSON is canonical, so the diff stays small. The file stays on this machine until you commit it yourself.
+
+`aifluxx chat` build mode uses `/layout` to open this page and, after you save, to ask the companion about wiring. The chat does not run a shell. See the SDK README.
+
 ## Screens
 - **Run**: pick an agent version, send a prompt, watch the streamed output.
 - **Status**: your agents, versions and statuses; raw stream log and HTTP errors (status, method, URL, body) for each run.

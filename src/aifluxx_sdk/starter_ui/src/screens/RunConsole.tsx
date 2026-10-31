@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ApiError, startRun, streamLines } from "../lib/api";
 import { renderLine } from "../lib/stream";
 import { ErrorBox } from "../components";
+import { LayoutBlocks } from "../LayoutBlocks";
+import { useLayout } from "../layout-context";
 import type { Agent, RunRecord } from "../types";
 
 interface Props { agents: Agent[]; runs: RunRecord[]; onRun: (r: RunRecord) => void; mock: boolean }
@@ -13,6 +15,7 @@ export function RunConsole({ agents, runs, onRun, mock }: Props) {
   const [busy, setBusy] = useState(false);
   const current = runs[0];
   const choice = sel || options[0]?.key || "";
+  const editing = useLayout()?.editing ?? false;
 
   async function go() {
     const [slug, versionId] = choice.split("|");
@@ -41,30 +44,41 @@ export function RunConsole({ agents, runs, onRun, mock }: Props) {
     <section>
       <h2>Run console</h2>
       <p className="muted">Runs a pushed agent version and streams its output. Labelled “run” until conversational chat is available.</p>
-      <div className="row">
-        <select value={choice} onChange={(e) => setSel(e.target.value)} aria-label="Agent version">
-          {options.length === 0 && <option value="">No agents found</option>}
-          {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-        </select>
-      </div>
-      <textarea rows={3} value={prompt} placeholder={mock ? "Try a prompt. Include 401, 500 or 307 to see simulated errors." : "Ask the agent something…"}
-        onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) go(); }} />
-      <button disabled={busy || !choice || !prompt.trim()} onClick={go}>{busy ? "Running…" : "Run"}</button>
-      {current && (
-        <div className="output">
-          <div className="muted">› {current.prompt}</div>
-          <div className="stream">
-            {current.lines.map(renderLine).map((r, i) => r && <span key={i} className={`l-${r.kind}`}>{r.kind === "text" ? r.text : <><br />{r.text}<br /></>}</span>)}
-          </div>
-          {current.error && <ErrorBox error={current.error} />}
-        </div>
-      )}
-      {runs.length > 1 && (
-        <>
-          <h3>Session prompts</h3>
-          <ul className="history">{runs.slice(1).map((r) => <li key={r.id}><code>{r.slug}</code> {r.prompt} <span className={`badge ${r.state}`}>{r.state}</span></li>)}</ul>
-        </>
-      )}
+      <LayoutBlocks
+        screen="Run"
+        blocks={{
+          "agent-picker": (
+            <div className="row">
+              <select value={choice} onChange={(e) => setSel(e.target.value)} aria-label="Agent version">
+                {options.length === 0 && <option value="">No agents found</option>}
+                {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </select>
+            </div>
+          ),
+          prompt: (
+            <textarea rows={3} value={prompt} placeholder={mock ? "Try a prompt. Include 401, 500 or 307 to see simulated errors." : "Ask the agent something…"}
+              onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) go(); }} />
+          ),
+          "run-action": (
+            <button className="primary" disabled={busy || !choice || !prompt.trim()} onClick={go}>{busy ? "Running…" : "Run"}</button>
+          ),
+          output: current ? (
+            <div className="output">
+              <div className="muted">› {current.prompt}</div>
+              <div className="stream">
+                {current.lines.map(renderLine).map((r, i) => r && <span key={i} className={`l-${r.kind}`}>{r.kind === "text" ? r.text : <><br />{r.text}<br /></>}</span>)}
+              </div>
+              {current.error && <ErrorBox error={current.error} />}
+            </div>
+          ) : editing ? <p className="muted">Output appears here.</p> : null,
+          history: runs.length > 1 ? (
+            <>
+              <h3>Session prompts</h3>
+              <ul className="history">{runs.slice(1).map((r) => <li key={r.id}><code>{r.slug}</code> {r.prompt} <span className={`badge ${r.state}`}>{r.state}</span></li>)}</ul>
+            </>
+          ) : editing ? <p className="muted">Earlier prompts appear here.</p> : null,
+        }}
+      />
     </section>
   );
 }

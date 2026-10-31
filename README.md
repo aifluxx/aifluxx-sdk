@@ -239,6 +239,47 @@ Sign up for a developer account at https://developer.aifluxx.co.za/signup. For h
 
 List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Create and rotate print the new secret once (`key_once`); it is left out of the text view and the JSON payload. `--name` on create sets the name (at most 80 characters). Omit it and the API uses `Sandbox key`. `--save` on create or rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
 
+## Companion
+
+`aifluxx companion` talks to the developer companion. `aifluxx chat` is the same chat.
+
+```bash
+aifluxx chat
+aifluxx chat "how do I add a connector"
+aifluxx chat --mode config --project my-agent "how do I add a connector"
+aifluxx companion status
+```
+
+Log in first with `aifluxx login`. Chat and status use that saved key and the same API root as the other developer commands: `AIFLUXX_API_URL`, then the URL saved by login, then `https://api.aifluxx.co.za`. The key goes out as `Authorization: Bearer` and is never printed.
+
+Inside a package (a folder with `spec.yaml`, the manifest `init`, `validate`, and `push` use), the slug is read from that file. Elsewhere pass `--project SLUG`.
+
+With no message, `aifluxx chat` opens a prompt labeled with the mode (`build>` or `config>`). `/exit` or Ctrl-D leaves. `/build` and `/config` switch mode. `/mode` prints the current one. The default is `build`. `--mode build` or `--mode config` sets it for a one-shot message and for the start of the chat.
+
+`build` is UI design and wiring: starter UI screens, components, A2UI, and how they connect to the agent. `config` is the agent instructions, the system prompt, tools, and connectors. Both modes talk to the same companion.
+
+Each turn is `POST /api/dev/companion/messages` with `message`, `project_slug`, and `mode`. The message starts with a short focus line for that mode, so a host that ignores `mode` still gets the focus. The reply is printed. A refusal is shown as `Refused: …`.
+
+`aifluxx companion status` calls `GET /api/dev/companion` and prints the version, approval, whether it is servable, the region endpoint, and the limits.
+
+A 401 tells you to run `aifluxx login`. A 429 says the limit was reached. A 503, or a payload that is not servable, says the companion is not servable right now.
+
+### Layout edit
+
+A terminal cannot drag, so build mode places components in the Starter UI. `/layout` (build mode only) opens `http://127.0.0.1:5173/?layout=1` and watches `aifluxx.layout.json` in the package. It does not run a shell.
+
+The page has a **Layout edit** toggle. Drag a block to reorder it, drag the corner to resize it, then **Save layout**. The file is canonical JSON (stable key order, packed on a 12-column grid) so diffs stay small. The write is local.
+
+Press Enter in the chat after a save. The chat sends the layout diff to the companion, shows the suggestion, and asks `Apply these project file updates? [y/N]`. The default is no. Yes writes `aifluxx.wiring.json` from the layout, plus any companion file edits that stay on the allow-list inside the package: `instructions.md`, `spec.yaml`, `aifluxx.layout.json`, and files under `ui/`. Paths outside the package are refused.
+
+Start the UI with the package path so Save writes that file:
+
+```bash
+AIFLUXX_PROJECT=/path/to/package AIFLUXX_LAYOUT_EDIT=1 npm run dev
+```
+
+From a copied starter (`aifluxx starter-ui`), run that in the copy and point `AIFLUXX_PROJECT` at the agent package. `?layout=1` turns Layout edit on when the page opens.
+
 ## Python
 
 ```python

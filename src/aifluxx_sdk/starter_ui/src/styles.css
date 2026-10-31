@@ -34,6 +34,17 @@ nav button.active { background: rgba(255,255,255,.11); color: #fff; font-weight:
 .topbar { height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 24px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--nav); }
 .topbar .sep { color: var(--dim); } .topbar .here { color: var(--ink-2); }
 .mock { margin-left: auto; color: var(--ember); border: 1px solid rgba(245,158,11,.4); background: rgba(245,158,11,.08); font-size: 10px; font-weight: 600; letter-spacing: .08em; padding: 2px 8px; border-radius: 6px; }
+.layout-toggle, .layout-save { margin-left: auto; }
+.mock { margin-left: 8px; }
+.layout-toggle.on { color: #0a0a0a; background: var(--ember); border-color: var(--ember); }
+.layout-save { margin-left: 8px; }
+.layout-note { margin: 0; padding: 8px 24px; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+.layout-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: minmax(36px, auto); gap: 10px; margin-top: 12px; }
+.layout-card { position: relative; min-width: 0; padding: 8px 8px 18px; border: 1px dashed rgba(255,255,255,.28); border-radius: var(--radius); background: rgba(255,255,255,.02); }
+.layout-handle { cursor: grab; margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.layout-body { min-width: 0; }
+.layout-resize { position: absolute; right: 4px; bottom: 4px; width: 14px; height: 14px; padding: 0; cursor: nwse-resize; background: rgba(255,255,255,.2); border-radius: 3px; }
+.layout-flow > * + * { margin-top: 8px; }
 main { flex: 1; overflow-y: auto; }
 main > * { max-width: 72rem; margin-left: auto; margin-right: auto; }
 main > section { padding: 32px 20px; }
@@ -49,7 +60,9 @@ button { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 12px; bor
 button:hover { background: rgba(255,255,255,.1); }
 main section > button { background: #f5f5f5; color: #0a0a0a; border-color: #f5f5f5; font-weight: 500; padding: 8px 16px; }
 main section > button:hover { background: #e5e5e5; }
-button:disabled, main section > button:disabled { opacity: .4; cursor: default; }
+button:disabled, main section > button:disabled, button.primary:disabled { opacity: .4; cursor: default; }
+button.primary { background: #f5f5f5; color: #0a0a0a; border-color: #f5f5f5; font-weight: 500; padding: 8px 16px; }
+button.primary:hover { background: #e5e5e5; }
 button.small { padding: 4px 10px; font-size: 11px; }
 button.danger { color: var(--err); }
 select, textarea { font: inherit; font-size: 14px; width: 100%; padding: 10px 14px; margin: 0 0 12px; background: rgba(0,0,0,.4); color: #e6edf3; border: 1px solid #30363d; border-radius: 10px; outline: none; }
