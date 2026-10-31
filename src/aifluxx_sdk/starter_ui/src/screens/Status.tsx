@@ -1,11 +1,21 @@
 import { ErrorBox } from "../components";
+import { LayoutBlocks } from "../LayoutBlocks";
 import type { Agent, RunRecord } from "../types";
 
 export function Status({ agents, runs, error, reload }: { agents: Agent[]; runs: RunRecord[]; error: RunRecord["error"] | null; reload: () => void }) {
   return (
     <section>
-      <h2>Status &amp; logs <button className="small" onClick={reload}>Refresh</button></h2>
-      {error && <ErrorBox error={error} />}
+      <h2>Status &amp; logs</h2>
+      <LayoutBlocks
+        screen="Status"
+        blocks={{
+          refresh: (
+            <>
+              <button className="small" onClick={reload}>Refresh</button>
+              {error && <ErrorBox error={error} />}
+            </>
+          ),
+          agents: (
       <table>
         <thead><tr><th>Agent</th><th>Version</th><th>Status</th><th>Version id</th></tr></thead>
         <tbody>
@@ -14,6 +24,9 @@ export function Status({ agents, runs, error, reload }: { agents: Agent[]; runs:
           )))}
         </tbody>
       </table>
+          ),
+          logs: (
+            <>
       <h3>Run logs (this session)</h3>
       {runs.length === 0 && <p className="muted">No runs yet.</p>}
       {runs.map((r) => (
@@ -23,6 +36,10 @@ export function Status({ agents, runs, error, reload }: { agents: Agent[]; runs:
           {r.error && <ErrorBox error={r.error} />}
         </details>
       ))}
+            </>
+          ),
+        }}
+      />
     </section>
   );
 }

@@ -1,23 +1,36 @@
 import { Hono } from "hono";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { isAllowed } from "./allowlist.js";
 import { classifyTools, CONNECTORS, publicToolId } from "./catalog.js";
 import { maskKey, mcpUrlFor, type ProxyConfig } from "./config.js";
 import { MOCK_AGENTS, MOCK_KEYS, MOCK_ME, MOCK_RUN_LINES, MOCK_SPEC } from "./fixtures.js";
+import { canonicalize, defaultLayout, serializeLayout } from "../src/lib/layout.js";
 
 export interface AppOptions {
   config: ProxyConfig;
   fetchImpl?: typeof fetch;
   specPath?: string;
   mockDelayMs?: number;
+  projectDir?: string;
+}
+
+export function layoutFile(projectDir: string): string {
+  const root = resolve(projectDir);
+  const file = resolve(root, "aifluxx.layout.json");
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (file !== join(root, "aifluxx.layout.json") && !file.startsWith(prefix)) {
+    throw new Error("layout path escapes the project");
+  }
+  return file;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function createApp({ config, fetchImpl = fetch, specPath, mockDelayMs = 250 }: AppOptions) {
+export function createApp({ config, fetchImpl = fetch, specPath, mockDelayMs = 250, projectDir }: AppOptions) {
   const app = new Hono();
+  const layoutRoot = resolve(projectDir || process.env.AIFLUXX_PROJECT || process.cwd());
 
   app.get("/local/config", (c) =>
     c.json({
@@ -45,6 +58,47 @@ export function createApp({ config, fetchImpl = fetch, specPath, mockDelayMs = 2
     }
     const connectors = (spec.knowledge?.connectors ?? []).map((id) => ({ id, known: CONNECTORS.includes(id) }));
     return c.json({ source, slug: spec.slug ?? null, tools: classifyTools(spec.tools ?? []), connectors });
+  });
+
+  app.get("/local/layout", (c) => {
+    const file = layoutFile(layoutRoot);
+    let layout = defaultLayout();
+    let exists = false;
+    if (existsSync(file)) {
+      try {
+        layout = canonicalize(JSON.parse(readFileSync(file, "utf8")));
+        exists = true;
+      } catch {
+        return c.json({ error: "layout_unreadable", path: file }, 400);
+      }
+    }
+    const flag = String(process.env.AIFLUXX_LAYOUT_EDIT || "").toLowerCase();
+    return c.json({
+      path: file,
+      exists,
+      editing: flag === "1" || flag === "true" || flag === "yes",
+      layout,
+    });
+  });
+
+  app.put("/local/layout", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "layout_invalid" }, 400);
+    }
+    if (!body || typeof body !== "object") return c.json({ error: "layout_invalid" }, 400);
+    let text: string;
+    try {
+      text = serializeLayout(canonicalize(body as { screens?: never }));
+    } catch {
+      return c.json({ error: "layout_invalid" }, 400);
+    }
+    const file = layoutFile(layoutRoot);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text, "utf8");
+    return c.json({ path: file, layout: JSON.parse(text) });
   });
 
   app.all("/proxy/*", async (c) => {

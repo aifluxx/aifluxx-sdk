@@ -982,6 +982,470 @@ def keys_revoke(
     _emit(payload, as_json=False)
 
 
+class CompanionGroup(typer.core.TyperGroup):
+    """``status`` is a subcommand. Any other words are the chat message."""
+
+    def invoke(self, ctx: typer.Context) -> Any:
+        pending = [*getattr(ctx, "_protected_args", []), *list(ctx.args)]
+        if pending and self.get_command(ctx, pending[0]) is None:
+            obj = ctx.ensure_object(dict)
+            obj["companion_message"] = " ".join(pending)
+            ctx._protected_args = []
+            ctx.args = []
+        return super().invoke(ctx)
+
+
+_COMPANION_MODES = ("build", "config")
+_FOCUS = {
+    "build": (
+        "Focus: build. UI design and wiring — starter UI screens, components, A2UI, "
+        "and how they connect to the agent."
+    ),
+    "config": "Focus: config. Agent instructions, the system prompt, tools, and connectors.",
+}
+_LAYOUT_EDITOR_URL = "http://127.0.0.1:5173/?layout=1"
+
+companion_app = typer.Typer(
+    cls=CompanionGroup,
+    no_args_is_help=False,
+    invoke_without_command=True,
+    help="Talk to the AIFluxx companion. `aifluxx chat` is the same chat.",
+)
+
+
+def _normalize_mode(value: str) -> str:
+    key = (value or "").strip().lower()
+    if key not in _COMPANION_MODES:
+        raise AifluxxError("--mode must be build or config.")
+    return key
+
+
+def _with_focus(mode: str, text: str) -> str:
+    """Prefix a short focus line so a host that ignores ``mode`` still follows it."""
+    return f"{_FOCUS[mode]}\n\n{text.strip()}"
+
+
+def _saved_key() -> str:
+    try:
+        return load_credentials().api_key
+    except AuthError:
+        return ""
+
+
+def _redact_text(text: str, secret: str) -> str:
+    from aifluxx_sdk.client import scrub_secret
+
+    cleaned = scrub_secret(text)
+    if secret and secret in cleaned:
+        cleaned = cleaned.replace(secret, "[redacted]")
+    return cleaned
+
+
+def _project_dir() -> Path | None:
+    cwd = Path.cwd()
+    if (cwd / "spec.yaml").is_file():
+        return cwd
+    return None
+
+
+def _slug_from_project(directory: Path) -> str:
+    import yaml
+
+    spec_path = directory / "spec.yaml"
+    try:
+        loaded = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        raise AifluxxError(f"Could not read {spec_path}.") from exc
+    except yaml.YAMLError as exc:
+        raise AifluxxError(f"Could not read {spec_path}.") from exc
+    if not isinstance(loaded, dict):
+        raise AifluxxError("spec.yaml must be a mapping.")
+    slug = loaded.get("slug")
+    if isinstance(slug, str) and slug.strip():
+        return slug.strip()
+    return directory.name
+
+
+def _resolve_project_slug(project: str | None) -> tuple[str, Path | None]:
+    """Slug from ``--project`` or from the package ``spec.yaml`` used by init, validate, and push."""
+    directory = _project_dir()
+    if project is not None and project.strip():
+        return project.strip(), directory
+    if directory is None:
+        raise AifluxxError(
+            "Pass --project SLUG, or run this inside an aifluxx package (a folder with spec.yaml)."
+        )
+    return _slug_from_project(directory), directory
+
+
+def _companion_record(payload: dict[str, Any]) -> dict[str, Any]:
+    markers = ("version", "approval", "approved", "servable", "region_endpoint", "regionEndpoint", "limits", "limit")
+    if any(key in payload for key in markers):
+        return payload
+    for wrapper in ("companion", "data", "status"):
+        child = payload.get(wrapper)
+        if isinstance(child, dict):
+            return child
+    return payload
+
+
+def _format_companion_status(payload: dict[str, Any]) -> str:
+    row = _companion_record(payload)
+    version = row.get("version")
+    approval = row.get("approval")
+    if approval is None:
+        approval = row.get("approved")
+    servable = row.get("servable")
+    if servable is None:
+        servable = row.get("is_servable")
+    endpoint = row.get("region_endpoint") or row.get("regionEndpoint") or row.get("endpoint")
+    limits = row.get("limits")
+    if limits is None:
+        limits = row.get("limit")
+    if isinstance(approval, str):
+        approval_text = display_state(approval)
+    elif isinstance(approval, bool):
+        approval_text = "Approved" if approval else "Not approved"
+    elif approval in (None, ""):
+        approval_text = "—"
+    else:
+        approval_text = str(approval)
+    if isinstance(servable, bool):
+        servable_text = "yes" if servable else "no"
+    elif servable in (None, ""):
+        servable_text = "—"
+    else:
+        servable_text = str(servable)
+    lines = [
+        "Companion",
+        f"  version: {version if version not in (None, '') else '—'}",
+        f"  approval: {approval_text}",
+        f"  servable: {servable_text}",
+        f"  region endpoint: {endpoint if endpoint else '—'}",
+        "  limits:",
+    ]
+    if isinstance(limits, dict) and limits:
+        lines.extend(f"    {key}: {value}" for key, value in limits.items())
+    elif isinstance(limits, list) and limits:
+        lines.extend(f"    - {item}" for item in limits)
+    elif limits not in (None, "", {}, []):
+        lines.append(f"    {limits}")
+    else:
+        lines.append("    —")
+    return "\n".join(lines)
+
+
+def _tool_line(tools: object) -> str | None:
+    if not isinstance(tools, list) or not tools:
+        return None
+    names: list[str] = []
+    for item in tools:
+        if isinstance(item, str) and item.strip():
+            names.append(item.strip())
+        elif isinstance(item, dict):
+            label = item.get("name") if isinstance(item.get("name"), str) else item.get("id")
+            if isinstance(label, str) and label.strip():
+                names.append(label.strip())
+    if not names:
+        return None
+    return "Tools: " + ", ".join(names)
+
+
+def _print_companion_reply(payload: dict[str, Any], *, secret: str, as_json: bool) -> bool:
+    """Print one companion response. Return True when the host refused."""
+    if as_json:
+        typer.echo(_redact_text(json.dumps(payload, indent=2), secret))
+    refusal = payload.get("refusal")
+    refused = refusal is True or (isinstance(refusal, str) and bool(refusal.strip()))
+    if as_json:
+        return refused
+    if refusal is True:
+        typer.secho("Refused.", err=True, fg="red")
+    elif isinstance(refusal, str) and refusal.strip():
+        typer.secho(f"Refused: {_redact_text(refusal.strip(), secret)}", err=True, fg="red")
+    reply = payload.get("reply")
+    if isinstance(reply, str) and reply.strip():
+        typer.echo(_redact_text(reply.strip(), secret))
+    elif not refused:
+        typer.echo("(No reply.)")
+    tool_line = _tool_line(payload.get("tools"))
+    if tool_line:
+        typer.echo(_redact_text(tool_line, secret))
+    return refused
+
+
+def _send_companion(client: AifluxxClient, *, text: str, slug: str, mode: str, secret: str, as_json: bool) -> bool:
+    payload = client.companion.send(_with_focus(mode, text), project_slug=slug, mode=mode)
+    return _print_companion_reply(payload, secret=secret, as_json=as_json)
+
+
+def _open_layout_editor() -> str:
+    """Open the Starter UI in layout-edit mode. This does not run a shell."""
+    import webbrowser
+
+    try:
+        webbrowser.open(_LAYOUT_EDITOR_URL)
+    except Exception:
+        pass
+    return _LAYOUT_EDITOR_URL
+
+
+def _layout_instructions(project: Path) -> str:
+    return (
+        "Layout edit runs in the Starter UI. A terminal cannot drag.\n"
+        f"Open {_LAYOUT_EDITOR_URL}\n"
+        "Turn on Layout edit, drag or resize the blocks, then Save layout.\n"
+        f"This chat watches {project / 'aifluxx.layout.json'} and asks before it writes wiring.\n"
+        "Start the UI with the package path. This command does not run a shell:\n"
+        f"  AIFLUXX_PROJECT={project} AIFLUXX_LAYOUT_EDIT=1 npm run dev"
+    )
+
+
+def _consume_layout_save(
+    client: AifluxxClient,
+    *,
+    project: Path,
+    snapshot: str,
+    slug: str,
+    secret: str,
+    as_json: bool,
+) -> str:
+    """Send a layout diff when the file changed. Return the snapshot to keep."""
+    from aifluxx_sdk.layout import (
+        apply_writes,
+        format_changes,
+        layout_changes,
+        load_layout_text,
+        proposed_writes,
+        read_layout_file,
+    )
+
+    current, document = read_layout_file(project)
+    if current == snapshot:
+        return snapshot
+    try:
+        before = load_layout_text(snapshot)
+    except AifluxxError:
+        before = document
+    changes = layout_changes(before, document)
+    if not changes:
+        return current
+    preview = format_changes(changes)
+    typer.echo("Layout saved.")
+    typer.echo(preview)
+    prompt = (
+        "The developer saved a Starter UI layout change.\n"
+        f"{preview}\n"
+        "Suggest wiring and code updates that match this layout. "
+        "File edits, if any, go in an aifluxx-files fence as JSON "
+        '{"files":[{"path":"instructions.md","content":"..."}]}.'
+    )
+    try:
+        payload = client.companion.send(_with_focus("build", prompt), project_slug=slug, mode="build")
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        typer.secho(_redact_text(str(exc), secret), err=True, fg="red")
+        return current
+    if _print_companion_reply(payload, secret=secret, as_json=as_json):
+        typer.echo("Not applied.")
+        return current
+    reply = payload.get("reply") if isinstance(payload.get("reply"), str) else ""
+    writes, skipped = proposed_writes(document, reply)
+    writes = [(relative, _redact_text(content, secret)) for relative, content in writes]
+    for note in skipped:
+        typer.secho(_redact_text(note, secret), err=True, fg="yellow")
+    typer.echo("Project files:")
+    for relative, _content in writes:
+        typer.echo(f"  {relative}")
+    answer = input("Apply these project file updates? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        typer.echo("Not applied.")
+        return current
+    try:
+        apply_writes(project, writes)
+    except (AifluxxError, OSError) as exc:
+        typer.secho(_redact_text(str(exc), secret), err=True, fg="red")
+        return current
+    for relative, _content in writes:
+        typer.echo(f"Wrote {relative}.")
+    return current
+
+
+def _repl(
+    client: AifluxxClient,
+    *,
+    slug: str,
+    mode: str,
+    project: Path | None,
+    secret: str,
+    as_json: bool,
+) -> None:
+    from aifluxx_sdk.layout import read_layout_file
+
+    watching = False
+    snapshot = ""
+    typer.echo(f"Companion chat ({mode}). /build /config /mode /layout /exit. Ctrl-D exits.")
+    while True:
+        try:
+            line = input(f"{mode}> ")
+        except EOFError:
+            typer.echo()
+            return
+        text = line.strip()
+        if not text:
+            if watching and project is not None:
+                snapshot = _consume_layout_save(
+                    client, project=project, snapshot=snapshot, slug=slug, secret=secret, as_json=as_json
+                )
+            continue
+        if text == "/exit":
+            return
+        if text == "/mode":
+            typer.echo(f"Mode is {mode}.")
+            continue
+        if text == "/build":
+            mode = "build"
+            typer.echo("Mode is build.")
+            continue
+        if text == "/config":
+            mode = "config"
+            typer.echo("Mode is config.")
+            continue
+        if text == "/layout":
+            if mode != "build":
+                typer.echo("Layout edit is a build-mode tool. Switch with /build.")
+                continue
+            if project is None:
+                typer.echo("Run /layout inside the package folder (the one with spec.yaml) so writes stay in the project.")
+                continue
+            snapshot, _document = read_layout_file(project)
+            watching = True
+            typer.echo(_layout_instructions(project))
+            _open_layout_editor()
+            continue
+        if text.startswith("/"):
+            typer.echo("Unknown command. Use /build, /config, /mode, /layout, or /exit.")
+            continue
+        if watching and project is not None:
+            snapshot = _consume_layout_save(
+                client, project=project, snapshot=snapshot, slug=slug, secret=secret, as_json=as_json
+            )
+        try:
+            _send_companion(client, text=text, slug=slug, mode=mode, secret=secret, as_json=as_json)
+        except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+            typer.secho(_redact_text(str(exc), secret), err=True, fg="red")
+
+
+def _chat_usage() -> str:
+    return (
+        "Usage: aifluxx chat [MESSAGE]\n"
+        "       aifluxx companion [MESSAGE]\n"
+        "Omit MESSAGE in a terminal to open the chat. /exit or Ctrl-D leaves."
+    )
+
+
+def _chat_session(
+    ctx: typer.Context,
+    message: str | None,
+    project: str | None,
+    mode: str,
+    json_output: bool,
+) -> None:
+    try:
+        chosen = _normalize_mode(mode)
+        slug, directory = _resolve_project_slug(project)
+    except AifluxxError as exc:
+        _die(exc)
+    secret = _saved_key()
+    as_json = _as_json(ctx, json_output)
+    if message is not None and message.strip():
+        try:
+            with _client() as client:
+                refused = _send_companion(
+                    client, text=message, slug=slug, mode=chosen, secret=secret, as_json=as_json
+                )
+        except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+            _die(AifluxxError(_redact_text(str(exc), secret)))
+        if refused:
+            raise typer.Exit(code=1)
+        return
+    if not _interactive():
+        typer.echo(_chat_usage(), err=True)
+        raise typer.Exit(code=1)
+    try:
+        with _client() as client:
+            _repl(client, slug=slug, mode=chosen, project=directory, secret=secret, as_json=as_json)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(AifluxxError(_redact_text(str(exc), secret)))
+
+
+def _project_option() -> Any:
+    return typer.Option(None, "--project", help="Package slug. Defaults to the slug in spec.yaml.")
+
+
+def _mode_option() -> Any:
+    return typer.Option(
+        "build",
+        "--mode",
+        help="build (UI and wiring) or config (instructions, tools, connectors). Default: build.",
+    )
+
+
+def _message_argument() -> Any:
+    return typer.Argument(None, help="Send one message and exit. Omit this in a terminal to chat.")
+
+
+@companion_app.callback(invoke_without_command=True)
+def companion_cmd(
+    ctx: typer.Context,
+    project: str | None = _project_option(),
+    mode: str = _mode_option(),
+    json_output: bool = _json_option(),
+) -> None:
+    """Chat with the companion. `aifluxx chat` is the same command. `companion status` prints host status.
+
+    A message after the options is sent once. With no message, a terminal opens the chat.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    message = None
+    if isinstance(ctx.obj, dict):
+        message = ctx.obj.pop("companion_message", None)
+    _chat_session(ctx, message if isinstance(message, str) else None, project, mode, json_output)
+
+
+@companion_app.command("status")
+def companion_status_cmd(
+    ctx: typer.Context,
+    json_output: bool = _json_option(),
+) -> None:
+    """Show companion version, approval, servable, region endpoint, and limits."""
+    secret = _saved_key()
+    try:
+        with _client() as client:
+            payload = client.companion.status()
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(AifluxxError(_redact_text(str(exc), secret)))
+    if _as_json(ctx, json_output):
+        typer.echo(_redact_text(json.dumps(payload, indent=2), secret))
+        return
+    typer.echo(_redact_text(_format_companion_status(payload), secret))
+
+
+@app.command("chat")
+def chat_cmd(
+    ctx: typer.Context,
+    message: str | None = _message_argument(),
+    project: str | None = _project_option(),
+    mode: str = _mode_option(),
+    json_output: bool = _json_option(),
+) -> None:
+    """Chat with the companion. Alias of `aifluxx companion`."""
+    _chat_session(ctx, message, project, mode, json_output)
+
+
+app.add_typer(companion_app, name="companion")
+
+
 STARTER_UI_DIR = Path(__file__).resolve().parent / "starter_ui"
 
 
