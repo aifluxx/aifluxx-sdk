@@ -19,6 +19,36 @@ from aifluxx_sdk.package import PACKAGE_SKIP_DIRS, validate_package
 
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
+# Handoffs and portfolios are not in the published Developer API OpenAPI 1.0.0
+# (https://api.aifluxx.co.za/api/openapi.json). aifluxx-developer PR 46 documents
+# them. Tools that call these paths say so in their description.
+REQUIRES_PLATFORM_V11 = "requires platform v1.1"
+
+
+def agent_rows(payload: Any) -> list[dict[str, Any]]:
+    """Package rows from ``GET /api/dev/agents``.
+
+    Accepts a list, an ``agents`` envelope, or one object that already has ``slug``.
+    """
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("agents", "packages", "projects", "items", "data", "results"):
+        rows = payload.get(key)
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    if payload.get("slug"):
+        return [payload]
+    return []
+
+
+def _segment(value: str, label: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned or any(mark in cleaned for mark in ("/", "\\", "?", "#")):
+        raise AifluxxError(f"{label} is invalid.")
+    return cleaned
+
 
 class DevClient:
     def __init__(self, http: httpx.Client, api_root: str) -> None:
@@ -126,6 +156,162 @@ class DevClient:
         version_id = self.resolve_version_id(slug, version, lock=lock)
         path = f"{self._api_root}/api/dev/agents/{slug}/versions/{version_id}/submit"
         return self._json(self._http.post(path))
+
+    def list_agents(self) -> Any:
+        """``GET /api/dev/agents``. Packages stored for this developer organisation."""
+        return self.status()
+
+    def get_agent(self, slug: str) -> dict[str, Any]:
+        """One package from ``GET /api/dev/agents``.
+
+        OpenAPI 1.0.0 has no ``GET /api/dev/agents/{slug}``. The list is the
+        published read.
+        """
+        wanted = _segment(slug, "slug")
+        for row in agent_rows(self.list_agents()):
+            if str(row.get("slug") or "") == wanted:
+                return row
+        raise AifluxxError(f"No agent {wanted} on this account.")
+
+    def save_agent(self, body: dict[str, Any]) -> Any:
+        """``POST /api/dev/agents``. OpenAPI operation Save Agent: create or update."""
+        return self._json(self._http.post(f"{self._api_root}/api/dev/agents", json=body))
+
+    def list_projects(self) -> dict[str, Any]:
+        """Projects are the org's packages. ``GET /api/dev/agents``.
+
+        Published OpenAPI 1.0.0 has no ``/api/dev/projects`` collection.
+        """
+        return {"projects": agent_rows(self.list_agents())}
+
+    def get_project(self, slug: str) -> dict[str, Any]:
+        """One project. Same record as ``get_agent``."""
+        return self.get_agent(slug)
+
+    def create_project(self, name: str, *, slug: str | None = None, description: str | None = None) -> Any:
+        """``POST /api/dev/agents`` with the portal create body."""
+        body: dict[str, Any] = {"name": name.strip()}
+        if not body["name"]:
+            raise AifluxxError("name is required.")
+        if slug is not None:
+            body["slug"] = _segment(slug, "slug")
+        if description is not None:
+            body["description"] = description
+        return self.save_agent(body)
+
+    def version_report(self, slug: str, version: str | None = None, *, lock: AgentLock | None = None) -> dict[str, Any]:
+        """``GET /api/dev/agents/{slug}/versions/{version_id}``.
+
+        The published description is version, validator report, scan report, badges, and state.
+        """
+        safe_slug = _segment(slug, "slug")
+        version_id = self.resolve_version_id(safe_slug, version, lock=lock)
+        path = f"{self._api_root}/api/dev/agents/{safe_slug}/versions/{_segment(version_id, 'version_id')}"
+        return self._json(self._http.get(path))
+
+    def list_connectors(self) -> Any:
+        """``GET /api/dev/connectors``.
+
+        The dev developer portal calls this for the platform connector catalog.
+        Published OpenAPI 1.0.0 does not list the path. Production
+        ``api.aifluxx.co.za`` returns ``route_not_found`` until that build is promoted.
+        """
+        return self._json(self._http.get(f"{self._api_root}/api/dev/connectors"))
+
+    def connector_schema(self, slug: str) -> dict[str, Any]:
+        """Platform data schema for one connector.
+
+        Reads ``GET /api/dev/connectors`` and returns entities and fields.
+        Provider tool lists on the row are left out.
+        """
+        wanted = _segment(slug, "connector")
+        payload = self.list_connectors()
+        rows: Any
+        if isinstance(payload, dict):
+            rows = payload.get("connectors")
+            if not isinstance(rows, list):
+                rows = payload.get("items") if isinstance(payload.get("items"), list) else []
+        elif isinstance(payload, list):
+            rows = payload
+        else:
+            rows = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            ident = str(row.get("slug") or row.get("connector") or row.get("id") or "")
+            if ident != wanted:
+                continue
+            return {
+                "connector": ident,
+                "name": row.get("name"),
+                "schema_version": row.get("schema_version"),
+                "access": row.get("access"),
+                "entities": row.get("entities") or [],
+            }
+        raise AifluxxError(f"No platform schema for connector {wanted}.")
+
+    def list_connections(self, agent: str | None = None) -> dict[str, Any]:
+        """External connections stored on packages.
+
+        ``GET /api/dev/agents`` carries ``external_connections``. There is no
+        list route. ``POST /api/dev/connections/discover`` accepts secrets and
+        is not used here. Platform connector data is ``connector_schema``.
+        """
+        wanted = _segment(agent, "agent") if agent else None
+        connections: list[dict[str, Any]] = []
+        for row in agent_rows(self.list_agents()):
+            slug = str(row.get("slug") or "")
+            if wanted and slug != wanted:
+                continue
+            raw = row.get("external_connections") or []
+            if not isinstance(raw, list):
+                continue
+            for item in raw:
+                if isinstance(item, dict):
+                    copied = dict(item)
+                    copied["agent"] = slug
+                    connections.append(copied)
+        return {"connections": connections}
+
+    def create_handoff(self, agent: str, summary: str, *, title: str | None = None) -> Any:
+        """``POST /api/dev/agents/{agent}/handoffs``. requires platform v1.1."""
+        safe = _segment(agent, "agent")
+        text = (summary or "").strip()
+        if not text:
+            raise AifluxxError("summary is required.")
+        body: dict[str, Any] = {"summary": text}
+        if title is not None and title.strip():
+            body["title"] = title.strip()
+        return self._json(self._http.post(f"{self._api_root}/api/dev/agents/{safe}/handoffs", json=body))
+
+    def list_handoffs(self, agent: str) -> Any:
+        """``GET /api/dev/agents/{agent}/handoffs``. requires platform v1.1."""
+        safe = _segment(agent, "agent")
+        return self._json(self._http.get(f"{self._api_root}/api/dev/agents/{safe}/handoffs"))
+
+    def get_handoff(self, agent: str, handoff_id: str) -> Any:
+        """``GET /api/dev/agents/{agent}/handoffs/{handoff_id}``. requires platform v1.1."""
+        safe = _segment(agent, "agent")
+        ident = _segment(handoff_id, "handoff_id")
+        return self._json(self._http.get(f"{self._api_root}/api/dev/agents/{safe}/handoffs/{ident}"))
+
+    def portfolio_me(self) -> Any:
+        """``GET /api/dev/portfolios/me``. requires platform v1.1."""
+        return self._json(self._http.get(f"{self._api_root}/api/dev/portfolios/me"))
+
+    def portfolio_overview(self) -> Any:
+        """``GET /api/dev/portfolios/overview``. requires platform v1.1."""
+        return self._json(self._http.get(f"{self._api_root}/api/dev/portfolios/overview"))
+
+    def portfolio_org(self, org_id: str) -> Any:
+        """``GET /api/dev/portfolios/orgs/{org_id}``. requires platform v1.1."""
+        safe = _segment(org_id, "org_id")
+        return self._json(self._http.get(f"{self._api_root}/api/dev/portfolios/orgs/{safe}"))
+
+    def portfolio_hide(self, org_id: str) -> Any:
+        """``POST /api/dev/portfolios/orgs/{org_id}/hide``. requires platform v1.1."""
+        safe = _segment(org_id, "org_id")
+        return self._json(self._http.post(f"{self._api_root}/api/dev/portfolios/orgs/{safe}/hide"))
 
     def import_git(self, repo_url: str, *, token: str | None = None, ref: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {"repo_url": repo_url}

@@ -500,11 +500,12 @@ def _host_read_tools() -> frozenset[str] | None:
 def _init_usage() -> str:
     prog = _prog()
     return (
-        f"Usage: {prog} init SLUG [--template NAME] [--venv | --no-venv]\n"
+        f"Usage: {prog} init SLUG [--template NAME] [--venv | --no-venv] [--cursor-mcp]\n"
         f"       {prog} init --list\n"
         "SLUG is the package folder name, in kebab-case. "
         "In a terminal, omitting SLUG prompts for it. "
-        "--venv creates SLUG/.venv. The default is --no-venv."
+        "--venv creates SLUG/.venv. The default is --no-venv. "
+        "--cursor-mcp writes SLUG/.cursor/mcp.json and does not put an API key in it."
     )
 
 
@@ -626,6 +627,11 @@ def init_cmd(
         "--venv/--no-venv",
         help="Create SLUG/.venv with python -m venv. Default --no-venv: do not create one.",
     ),
+    cursor_mcp: bool = typer.Option(
+        False,
+        "--cursor-mcp",
+        help="Also write .cursor/mcp.json for the local aifluxx MCP server. The file does not contain an API key.",
+    ),
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
@@ -669,6 +675,13 @@ def init_cmd(
         except AifluxxError as exc:
             _die(exc)
         typer.echo(f"Created {created}. Do not commit it. `aifluxx push` leaves it out.")
+    if cursor_mcp:
+        from aifluxx_sdk.mcp_server import cursor_mcp_document
+
+        mcp_file = root / ".cursor" / "mcp.json"
+        mcp_file.parent.mkdir(parents=True, exist_ok=True)
+        mcp_file.write_text(cursor_mcp_document(), encoding="utf-8")
+        typer.echo(f"Wrote {mcp_file}. It does not contain an API key.")
     typer.echo(f"Created {root}. Commit this folder to your Git repo, then `aifluxx push` or Import from Git.")
 
 
@@ -1523,6 +1536,30 @@ def source_cmd(
     except AifluxxError as exc:
         _die(exc)
     typer.echo(f"Created {root}.")
+
+
+@app.command("mcp")
+def mcp_cmd(
+    http: bool = typer.Option(False, "--http", help="Serve streamable HTTP instead of stdio."),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host for --http."),
+    port: int = typer.Option(8000, "--port", help="Port for --http."),
+) -> None:
+    """Run the developer-platform MCP server.
+
+    Stdio is the default. Auth is AIFLUXX_API_KEY or the key from `aifluxx login`.
+    The key is not printed. Install the extra with pip install 'aifluxx-sdk[mcp]'.
+    """
+    argv = ["--host", host, "--port", str(port)]
+    if http:
+        argv.insert(0, "--http")
+    from aifluxx_sdk.mcp_server import main as mcp_main
+
+    try:
+        mcp_main(argv)
+    except SystemExit as exc:
+        if exc.code not in (None, 0):
+            _die(AifluxxError(str(exc.code) if not isinstance(exc.code, int) else "The MCP server stopped."))
+        raise
 
 
 def main() -> None:

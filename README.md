@@ -207,7 +207,7 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. `aifluxx init SLUG --cursor-mcp` also writes `SLUG/.cursor/mcp.json` for the local MCP server. That file does not contain an API key. `--list` does not write it. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
 
@@ -339,24 +339,92 @@ Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_â€
 
 `aifluxx run` reads an error body before it raises. A streamed 4xx or 5xx is shown as that host message, not as `httpx.ResponseNotRead`.
 
-## MCP
+## MCP server
 
-MCP clients talk to the host. This package does not embed an MCP server. The MCP URL is the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.aifluxx.co.za/mcp/`. `AifluxxClient.mcp_url` returns that URL for the client.
+`pip install 'aifluxx-sdk[mcp]'` adds a local MCP server built with FastMCP from the official Python `mcp` SDK (`mcp>=1.20,<2`). The extra is optional. The rest of the SDK installs and runs without it.
+
+Stdio is the default. `aifluxx mcp` and `aifluxx-mcp` start the same server. `aifluxx mcp --http` (or `aifluxx-mcp --http`) serves streamable HTTP on `http://127.0.0.1:8000/mcp`. `--host` and `--port` change that bind address.
+
+Auth is the existing SDK config. `AIFLUXX_API_KEY` wins when it is set. Otherwise the server uses the key saved by `aifluxx login` (`~/.aifluxx/credentials`, or `AIFLUXX_CREDENTIALS`). The API root is `AIFLUXX_API_URL`, then the saved login URL, then `https://api.aifluxx.co.za`. The key is not written into MCP config, tool results, or logs.
+
+### Cursor
+
+`aifluxx init my-agent --cursor-mcp` writes this file at `my-agent/.cursor/mcp.json`. It does not contain an API key. Put the same JSON in a repo yourself if you skip the flag.
 
 ```json
 {
   "mcpServers": {
     "aifluxx": {
-      "url": "https://api.aifluxx.co.za/mcp/",
-      "headers": {
-        "Authorization": "Bearer afx_live_â€¦"
-      }
+      "command": "aifluxx",
+      "args": ["mcp"]
     }
   }
 }
 ```
 
-Use the HTTPS URL exactly as shown, including the trailing slash. Multi-business keys pass `business_id` the same way the Python client does.
+Set `AIFLUXX_API_KEY` in the environment Cursor uses to launch the process, or run `aifluxx login` on that machine first.
+
+### Other MCP clients
+
+```json
+{
+  "mcpServers": {
+    "aifluxx": {
+      "command": "aifluxx-mcp"
+    }
+  }
+}
+```
+
+Streamable HTTP, after `aifluxx mcp --http`:
+
+```json
+{
+  "mcpServers": {
+    "aifluxx": {
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+
+Clients discover tools, resources, and prompts from the MCP list methods. No custom integration is required.
+
+### Tools
+
+Projects are developer packages. Published OpenAPI 1.0.0 has no `/api/dev/projects` collection, so project tools use `GET` and `POST /api/dev/agents`. Companion `project_slug` is that package slug.
+
+| Tool | Route |
+|---|---|
+| `projects_list`, `projects_get`, `projects_create` | `GET` / `POST /api/dev/agents` |
+| `agents_list`, `agents_get`, `agents_create`, `agents_update` | `GET` / `POST /api/dev/agents`. There is no `GET /api/dev/agents/{slug}` on OpenAPI 1.0.0, so get filters the list. Save Agent is create or update. |
+| `connectors_list_catalog`, `connectors_read_schema` | `GET /api/dev/connectors`. The dev developer host serves this path. Published OpenAPI 1.0.0 does not list it yet. The schema is `schema_version`, `access`, and entities with fields. Provider tool lists are dropped. |
+| `connectors_list_connections` | `external_connections` on `GET /api/dev/agents`. Secrets are removed. `POST /api/dev/connections/discover` accepts secrets and is not a tool. |
+| `validate_manifest` | Local `spec.yaml` check. No HTTP call. |
+| `push_package` | `POST /api/dev/agents/{slug}/versions` |
+| `submit_for_review` | `POST /api/dev/agents/{slug}/versions/{version_id}/submit` |
+| `review_status` | `GET /api/dev/agents/{slug}/versions/{version_id}` (version, validator report, scan report, badges, and state) |
+| `companion_send_message`, `companion_get_reply` | `POST /api/dev/companion/messages`. The reply is on that response. There is no separate GET. |
+| `handoffs_create`, `handoffs_list`, `handoffs_get` | `POST` / `GET /api/dev/agents/{agent}/handoffs` and `GET .../handoffs/{handoff_id}`. **requires platform v1.1** |
+| `portfolios_me`, `portfolios_overview`, `portfolios_org`, `portfolios_hide` | `GET /api/dev/portfolios/me`, `GET /api/dev/portfolios/overview`, `GET /api/dev/portfolios/orgs/{org_id}`, `POST .../hide`. **requires platform v1.1** |
+
+Handoffs and portfolios are not in published OpenAPI 1.0.0. They follow the routes documented for aifluxx-developer PR 46. Until that API is on the host you are calling, those tools return the host's not-found error. Each tool description includes `requires platform v1.1`.
+
+Agents read connector data through `connectors_read_schema`. They do not receive raw provider tools.
+
+### Resources and prompts
+
+| Kind | Name | What it is |
+|---|---|---|
+| Resource | `aifluxx://schemas/agent` | Agent manifest schema `aifluxx/agent/v1` |
+| Resource | `aifluxx://schemas/connectors` | Platform connector schema rules |
+| Resource template | `aifluxx://agents/{slug}/manifest` | Stored manifest from `GET /api/dev/agents`, secrets removed |
+| Prompt | `start_new_agent` | Start a new agent (validate, platform schema, create, push, review) |
+| Prompt | `resume_from_handoff` | Continue from a handoff. **requires platform v1.1** |
+
+### Host MCP URL
+
+`AifluxxClient.mcp_url` is still the host endpoint: the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.aifluxx.co.za/mcp/`. That URL is the platform host. The server in this section runs locally and calls the developer API with the SDK client.
 
 ## Develop
 
