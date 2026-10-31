@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
@@ -499,11 +500,36 @@ def _host_read_tools() -> frozenset[str] | None:
 def _init_usage() -> str:
     prog = _prog()
     return (
-        f"Usage: {prog} init SLUG [--template NAME]\n"
+        f"Usage: {prog} init SLUG [--template NAME] [--venv | --no-venv]\n"
         f"       {prog} init --list\n"
         "SLUG is the package folder name, in kebab-case. "
-        "In a terminal, omitting SLUG prompts for it."
+        "In a terminal, omitting SLUG prompts for it. "
+        "--venv creates SLUG/.venv. The default is --no-venv."
     )
+
+
+def _create_venv(root: Path) -> Path:
+    """Create ``root/.venv`` with this interpreter. Remove a partial directory on failure."""
+    dest = root / ".venv"
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(dest)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(dest, ignore_errors=True)
+        detail = (exc.stderr or exc.stdout or "").strip()
+        message = f"Could not create {dest}."
+        if detail:
+            message = f"{message} {detail}"
+        raise AifluxxError(message) from exc
+    except OSError as exc:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise AifluxxError(f"Could not create {dest}. {exc}") from exc
+    return dest
 
 
 def _resolve_slug(slug: str | None) -> str:
@@ -595,6 +621,11 @@ def init_cmd(
     template: str = typer.Option(DEFAULT_TEMPLATE, "--template", "-t", help=template_option_help()),
     dest: Path | None = typer.Option(None, "--dest", help="Parent folder. Defaults to the current directory."),
     list_templates: bool = typer.Option(False, "--list", help="List starter templates and do not write a package."),
+    venv: bool = typer.Option(
+        False,
+        "--venv/--no-venv",
+        help="Create SLUG/.venv with python -m venv. Default --no-venv: do not create one.",
+    ),
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
@@ -632,6 +663,12 @@ def init_cmd(
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(folder)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
+    if venv:
+        try:
+            created = _create_venv(root)
+        except AifluxxError as exc:
+            _die(exc)
+        typer.echo(f"Created {created}. Do not commit it. `aifluxx push` leaves it out.")
     typer.echo(f"Created {root}. Commit this folder to your Git repo, then `aifluxx push` or Import from Git.")
 
 

@@ -58,6 +58,16 @@ def test_secret_in_local_meta_is_ignored(tmp_path: Path):
     assert report.ok
 
 
+def test_secret_in_venv_is_ignored(tmp_path: Path):
+    pkg = _write_ok(tmp_path)
+    venv = pkg / ".venv"
+    venv.mkdir()
+    (venv / "leak.txt").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    report = validate_package(pkg)
+    assert report.ok
+    assert not any(row.code == "secret_in_package" for row in report.findings)
+
+
 def test_secret_in_package(tmp_path: Path):
     pkg = _write_ok(tmp_path)
     (pkg / "notes.md").write_text("token = 'supersecretvalue'\n", encoding="utf-8")

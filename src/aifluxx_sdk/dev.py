@@ -15,7 +15,7 @@ from aifluxx_sdk.catalog import parse_tool_catalogue
 from aifluxx_sdk.credentials import mcp_url
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
-from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
+from aifluxx_sdk.package import PACKAGE_SKIP_DIRS, validate_package
 
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
@@ -467,8 +467,8 @@ def version_upload(package_dir: Path, spec: dict[str, Any], slug: str, version: 
     * ``package`` — file part, filename ``package.tar.gz``, part
       ``Content-Type: application/gzip``. Bytes are a gzip-compressed ustar
       archive (magic ``1f 8b``). Member names are paths relative to the
-      package root. ``.aifluxx`` and a leftover metadata directory from an
-      older install are omitted.
+      package root. ``.aifluxx``, a leftover metadata directory from an
+      older install, and ``.venv`` are omitted.
     * ``metadata`` — form field (no filename), part
       ``Content-Type: application/json``. UTF-8 JSON object with keys
       ``slug``, ``version`` (semver from spec.yaml), ``schema``, and ``spec``
@@ -492,7 +492,7 @@ def _tarball(package_dir: Path) -> bytes:
     root = package_dir.resolve()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for path in root.rglob("*"):
-            if not path.is_file() or LOCAL_META_DIRS.intersection(path.parts):
+            if not path.is_file() or PACKAGE_SKIP_DIRS.intersection(path.parts):
                 continue
             tar.add(path, arcname=str(path.relative_to(root)))
     return buf.getvalue()

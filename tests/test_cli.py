@@ -1,5 +1,6 @@
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -840,3 +841,90 @@ def test_help_lists_login_commands_still_present():
     assert result.exit_code == 0, text
     assert "--list" in text
     assert "[slug]" in text.lower()
+
+
+def test_init_help_lists_venv_flags():
+    text = _flat(_text(runner.invoke(app, ["init", "--help"])))
+    assert "--venv" in text
+    assert "--no-venv" in text
+    assert ".venv" in text
+
+
+def test_init_default_and_no_venv_skip_the_virtualenv(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
+    default = runner.invoke(app, ["init", "plain-agent"])
+    assert default.exit_code == 0, _text(default)
+    assert (tmp_path / "plain-agent" / "spec.yaml").is_file()
+    assert not (tmp_path / "plain-agent" / ".venv").exists()
+    explicit = runner.invoke(app, ["init", "explicit-agent", "--no-venv"])
+    assert explicit.exit_code == 0, _text(explicit)
+    assert (tmp_path / "explicit-agent" / "spec.yaml").is_file()
+    assert (tmp_path / "explicit-agent" / "instructions.md").is_file()
+    assert (tmp_path / "explicit-agent" / "README.md").is_file()
+    assert (tmp_path / "explicit-agent" / "samples.yaml").is_file()
+    assert not (tmp_path / "explicit-agent" / ".venv").exists()
+
+
+def test_init_venv_creates_package_venv_and_validate_ignores_it(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
+    result = runner.invoke(app, ["init", "venv-agent", "--venv"])
+    text = _text(result)
+    assert result.exit_code == 0, text
+    root = tmp_path / "venv-agent"
+    venv = root / ".venv"
+    assert (venv / "pyvenv.cfg").is_file()
+    assert "Do not commit it" in text
+    (venv / "leak.txt").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    checked = runner.invoke(app, ["validate", str(root)])
+    checked_text = _text(checked)
+    assert checked.exit_code == 0, checked_text
+    assert "OK" in checked_text
+    assert "secret_in_package" not in checked_text
+
+
+def test_init_list_with_venv_writes_nothing(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["init", "--list", "--venv"])
+    assert result.exit_code == 0, _text(result)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_init_venv_failure_does_not_leave_a_partial_venv(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
+
+    def fail(cmd, **kwargs):
+        raise subprocess.CalledProcessError(1, cmd, stderr="No module named venv")
+
+    monkeypatch.setattr("aifluxx_sdk.cli.subprocess.run", fail)
+    result = runner.invoke(app, ["init", "broken-agent", "--venv"])
+    text = _text(result)
+    assert result.exit_code == 1
+    assert "Could not create" in text
+    assert ".venv" in text
+    assert (tmp_path / "broken-agent" / "spec.yaml").is_file()
+    assert not (tmp_path / "broken-agent" / ".venv").exists()
+
+
+def test_readme_install_with_cursor_prompt():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    start = readme.index("## Install with Cursor\n")
+    end = readme.index("\n## Install\n", start)
+    section = readme[start:end]
+    assert section.count("```") == 2
+    assert "```text\n" in section
+    assert "Open Cursor, copy the prompt below, and paste it into Cursor's chat." in section
+    assert "python3 --version" in section
+    assert "3.11" in section
+    assert "source .venv/bin/activate" in section
+    assert "Activate.ps1" in section
+    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.2.0" in section
+    assert "aifluxx login" in section
+    assert "Never echo the key" in section
+    assert "aifluxx init <project> --venv" in section
+    assert "aifluxx init <project> --no-venv" in section
+    assert "aifluxx validate <project>" in section
+    assert "Report what you did" in section
+    assert "aifluxx-sdk @ git+" not in section
