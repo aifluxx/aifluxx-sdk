@@ -23,6 +23,7 @@ from aifluxx_sdk.credentials import (
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, HostUnavailable
 from aifluxx_sdk.lockfile import load_lock
 from aifluxx_sdk.package import validate_package
+from aifluxx_sdk.source import copy_sdk_source
 from aifluxx_sdk.templates import (
     DEFAULT_TEMPLATE,
     get_template,
@@ -1000,6 +1001,27 @@ def starter_ui_cmd(
         _die(AifluxxError(f"{root} already exists and is not empty. Pass --force to overwrite."))
     shutil.copytree(STARTER_UI_DIR, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "UPSTREAM"))
     typer.echo(f"Created {root}. Next: cd {dest} && npm install && npm run dev")
+
+
+@app.command("source")
+def source_cmd(
+    dest: Path = typer.Argument(
+        Path("aifluxx-sdk"),
+        help="Folder to create. Defaults to ./aifluxx-sdk.",
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Write into a non-empty folder, overwriting files."),
+) -> None:
+    """Copy the installed SDK source tree into DEST.
+
+    Writes package code, templates, the starter UI, README, pyproject.toml,
+    LICENSE, and examples. A non-empty folder is left unchanged unless you
+    pass --force.
+    """
+    try:
+        root = copy_sdk_source(dest, force=force)
+    except AifluxxError as exc:
+        _die(exc)
+    typer.echo(f"Created {root}.")
 
 
 def main() -> None:

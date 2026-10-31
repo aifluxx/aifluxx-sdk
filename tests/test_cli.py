@@ -543,11 +543,13 @@ def test_version_flag_prints_sdk_version():
 
     pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
     declared = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
-    assert declared == "1.1.0"
-    assert __version__ == "1.1.0"
+    assert declared == "1.2.0"
+    assert __version__ == "1.2.0"
+    init_text = (pyproject.parent / "src" / "aifluxx_sdk" / "__init__.py").read_text(encoding="utf-8")
+    assert '__version__ = "1.2.0"' in init_text
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, _text(result)
-    assert _text(result).strip() == "1.1.0"
+    assert _text(result).strip() == "1.2.0"
 
 
 def test_readme_install_dev_login_and_brand():
