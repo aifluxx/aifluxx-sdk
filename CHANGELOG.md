@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-31
+
+### Added
+
+- The recommended local install is a clone and an editable install: `git clone https://github.com/aifluxx/aifluxx-sdk`, then `pip install -e ./aifluxx-sdk` inside a virtual environment. The clone is a normal SDK folder in the project. Editable installs include the templates and the starter UI.
+- `aifluxx source [DEST]` copies the installed SDK into a folder (default `./aifluxx-sdk`): package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. A non-empty destination is left unchanged unless you pass `--force`. Those files ship in the wheel and the sdist, so the command works after a pip install as well as from a checkout.
+
 ## 1.1.0 - 2026-10-31
 
 ### Added

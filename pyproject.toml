@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifluxx-sdk"
-version = "1.1.0"
+version = "1.2.0"
 description = "Python client and aifluxx CLI for the AIFluxx developer API."
 readme = "README.md"
 license = "MIT"
@@ -41,6 +41,9 @@ aifluxx = "aifluxx_sdk.cli:main"
 dev = ["pytest>=8.0,<9", "build>=1.2", "twine>=6"]
 a2a = ["a2a-sdk>=1.1,<2"]
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -50,6 +53,8 @@ aifluxx_sdk = [
   "starter_ui/**/*",
   "starter_ui/.env.example",
   "starter_ui/.gitignore",
+  # setup.py copies this tree into the wheel. It is not part of the checkout.
+  "_source_root/**/*",
 ]
 
 [tool.pytest.ini_options]

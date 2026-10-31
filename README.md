@@ -6,13 +6,111 @@ Signup, docs, and the developer site stay on the AIFluxx host. This repository d
 
 ## Install
 
-Requires Python 3.11 or newer. The package is not on PyPI; install it from GitHub:
+Requires Python 3.11 or newer. The package is not on PyPI. Use a virtual environment.
+
+Pip installs the package into that environment. It leaves the project directory unchanged. To have the SDK as a normal folder in the project, use the clone below, or copy it out after a pip install with `aifluxx source`.
+
+### Recommended: clone and editable install
+
+Clone the repository, then install that folder in editable mode. Python imports the clone, so the SDK is a normal directory in your project. Templates (`src/aifluxx_sdk/templates.py`) and the starter UI (`src/aifluxx_sdk/starter_ui/`) are part of that tree. This works on macOS, Linux, and Windows.
+
+bash:
 
 ```bash
-pip install git+https://github.com/aifluxx/aifluxx-sdk
+python -m venv .venv
+source .venv/bin/activate
+git clone https://github.com/aifluxx/aifluxx-sdk
+pip install -e ./aifluxx-sdk
 ```
 
-To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.1.0`.
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+git clone https://github.com/aifluxx/aifluxx-sdk
+pip install -e .\aifluxx-sdk
+```
+
+If PowerShell refuses the activate script, allow scripts for this window and run the activate command again:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+The clone is a git checkout. The folders you use look like this:
+
+```
+aifluxx-sdk/
+  LICENSE
+  README.md
+  pyproject.toml
+  examples/
+    send_mail.py
+  src/
+    aifluxx_sdk/
+      templates.py
+      starter_ui/
+        package.json
+        .env.example
+        .gitignore
+        ...
+  tests/
+```
+
+The checkout also contains the tests and the GitHub workflows.
+
+### Pip install, then copy the source into the project
+
+Install from GitHub when you want the package on `PATH` without a clone. Copy the installed SDK into the project with `aifluxx source`. The default folder is `./aifluxx-sdk`.
+
+bash:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install git+https://github.com/aifluxx/aifluxx-sdk
+aifluxx source
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install git+https://github.com/aifluxx/aifluxx-sdk
+aifluxx source
+```
+
+`aifluxx source my-sdk` writes `./my-sdk` instead. The command leaves a non-empty destination unchanged. Pass `--force` to overwrite files in that folder.
+
+The folder this writes:
+
+```
+aifluxx-sdk/
+  LICENSE
+  README.md
+  pyproject.toml
+  setup.py
+  MANIFEST.in
+  examples/
+    README.md
+    send_mail.py
+  src/
+    aifluxx_sdk/
+      __init__.py
+      cli.py
+      templates.py
+      starter_ui/
+        package.json
+        .env.example
+        .gitignore
+        ...
+```
+
+That tree is the installed version: package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. `setup.py` and `MANIFEST.in` are the packaging files that put this tree in the wheel. To work on the SDK itself and keep git history, use the clone and editable install above.
+
+To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.2.0`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
@@ -108,6 +206,7 @@ aifluxx import-git https://github.com/your-org/your-agent
 aifluxx keys list
 aifluxx keys rotate <key-id>
 aifluxx keys revoke <key-id>
+aifluxx source
 ```
 
 After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is filled from the push response: an explicit `version_id`, the id on the nested version object, or the response `id` when `version` is the semver that was just uploaded (that object also includes the package slug). It stays `null` when the response has no version UUID. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
