@@ -17,9 +17,9 @@ Optionally create and activate a virtual environment, then install into it. Skip
 - bash: `python -m venv .venv` then `source .venv/bin/activate`
 - Windows PowerShell: `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
 
-Install aifluxx 1.3.0:
+Install aifluxx 1.3.1:
 
-pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.0
+pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.1
 
 Run `aifluxx login`. Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there.
 
@@ -140,7 +140,7 @@ aifluxx-sdk/
 
 That tree is the installed version: package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. `setup.py` and `MANIFEST.in` are the packaging files that put this tree in the wheel. To work on the SDK itself and keep git history, use the clone and editable install above.
 
-To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.0`.
+To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.1`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
@@ -209,7 +209,7 @@ aifluxx submit
 
 `init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. `aifluxx init SLUG --cursor-mcp` also writes `SLUG/.cursor/mcp.json` for the local MCP server. That file does not contain an API key. `--list` does not write it. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
 
-`validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
+`validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`. Both commands leave out `.aifluxx/`, `.venv/`, the legacy metadata directory, a top-level `sdk/` directory, `*.egg-info`, and paths listed in `.aifluxxignore`.
 
 `status`, `push`, `submit`, `import-git`, and `keys` print a short text view. States use one casing (`Draft`, `Submitted`, `Published`, `Rejected`, and the same for the other known states). `--json` prints the API payload unchanged. It works on the command (`aifluxx status --json`) and before it (`aifluxx --json status`).
 
@@ -219,10 +219,20 @@ aifluxx submit
 |---|---|
 | Method and path | `POST /api/dev/agents/{slug}/versions` |
 | Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
-| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx`, a leftover metadata directory from an older install, and `.venv` are left out. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx`, a leftover metadata directory from an older install, `.venv`, a top-level `sdk/` directory, `*.egg-info`, and paths in `.aifluxxignore` are left out. |
 | Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
+
+`validate` and the upload share one exclude list. These paths are left out of the secret scan and of `package.tar.gz`:
+
+- `.aifluxx/` and a leftover metadata directory from an older install, at any depth
+- `.venv/` at any depth (`aifluxx init --venv` creates it next to `spec.yaml`)
+- the `sdk/` directory at the package root, so a vendored copy of this SDK is not checked or uploaded (its README, `examples/send_mail.py`, and test fixtures stay on your machine)
+- a file or directory whose name matches `*.egg-info`, at any depth, including `sdk/src/*.egg-info` and metadata from an editable install
+- every extra path listed in `.aifluxxignore` at the package root
+
+`.aifluxxignore` is the exclude list. It is a gitignore-style file next to `spec.yaml`, and it does not change the spec sent to the host. Blank lines and lines that start with `#` are ignored. A trailing `/` matches a directory (`vendor/` matches a directory named `vendor` in any directory). A pattern with no `/` matches that name in any directory (`*.pem`). A pattern with a `/` in the middle is relative to the package root (`docs/*.md` matches `docs/a.md` and leaves `docs/sub/a.md` in the package). `**` matches across directories. `\` is read as `/`. Matching is case-sensitive. The defaults above always apply. A line that starts with `!`, a `..` segment, or a file that is not UTF-8 makes `validate` fail. The ignore file is uploaded unless a pattern excludes it. Leave `spec.yaml`, `instructions.md`, and declared subagent directories out of the list so the host still receives them. `.png`, `.jpg`, and `.webp` files that are not excluded are uploaded and are not secret-scanned. A nested directory named `sdk` is still packaged; add it to `.aifluxxignore` when it should be left out.
 
 `run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API. With no prompt, `aifluxx run` reads one prompt from stdin. In a terminal, no prompt prints usage and exits 1.
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-31
+
+### Added
+
+- `aifluxx validate` and `aifluxx push` skip a top-level `sdk/` directory and any `*.egg-info` path. A vendored SDK (`sdk/README.md`, `sdk/examples/send_mail.py`, test fixtures such as `afx_dev_testkey_abcd`, and `sdk/src/*.egg-info`) no longer fails the secret check, and those files are left out of the uploaded archive. `.aifluxx/`, `.venv/`, and the legacy metadata directory stay skipped.
+- Extra paths go in `.aifluxxignore` at the package root. Lines follow gitignore rules: `#` comments, a trailing slash for a directory, a slash to anchor at the package root, and `**` across directories. Those paths are left out of the secret scan and the upload.
+
 ## 1.3.0 - 2026-10-31
 
 ### Added

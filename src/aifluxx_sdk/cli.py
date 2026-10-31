@@ -687,7 +687,11 @@ def init_cmd(
 
 @app.command()
 def validate(path: Path | None = typer.Argument(None, help="Package folder. Defaults to the current directory.")) -> None:
-    """Check the package. Uses the host tool catalogue when you are logged in."""
+    """Check the package. Uses the host tool catalogue when you are logged in.
+
+    Skips .aifluxx/, .venv/, the legacy metadata directory, a top-level sdk/ directory,
+    any *.egg-info path, and paths listed in .aifluxxignore. push leaves those paths out.
+    """
     try:
         directory = _package_dir(path)
         tools = _host_read_tools()
@@ -710,7 +714,10 @@ def push(
     path: Path | None = typer.Argument(None, help="Package folder. Defaults to the current directory."),
     json_output: bool = _json_option(),
 ) -> None:
-    """Upload the folder you have open. Creates a Draft. Does not git push."""
+    """Upload the folder you have open. Creates a Draft. Does not git push.
+
+    The archive leaves out the same paths validate skips, including .aifluxxignore entries.
+    """
     try:
         package = _package_dir(path)
         with _client() as client:
