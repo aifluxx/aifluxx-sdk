@@ -443,3 +443,36 @@ def test_tarball_skips_venv(tmp_path: Path):
     with tarfile.open(fileobj=io.BytesIO(_tarball(package)), mode="r:gz") as archive:
         names = archive.getnames()
     assert names == ["spec.yaml"]
+
+
+def test_push_omits_sdk_egg_info_and_ignore_paths(tmp_path: Path):
+    package = tmp_path / "agent"
+    package.mkdir()
+    template = get_template("compliance")
+    (package / "spec.yaml").write_text(render_spec("agent", template), encoding="utf-8")
+    (package / "instructions.md").write_text(template.instructions, encoding="utf-8")
+    (package / "keep.txt").write_text("hello\n", encoding="utf-8")
+    (package / ".aifluxxignore").write_text("vendor/\n", encoding="utf-8")
+    sdk = package / "sdk" / "examples"
+    sdk.mkdir(parents=True)
+    (package / "sdk" / "README.md").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    (sdk / "send_mail.py").write_text('API_KEY = "afx_dev_testkey_abcd"\n', encoding="utf-8")
+    egg = package / "src" / "my_agent.egg-info"
+    egg.mkdir(parents=True)
+    (egg / "PKG-INFO").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    (package / "vendor").mkdir()
+    (package / "vendor" / "key.txt").write_text("token = 'supersecretvalue'\n", encoding="utf-8")
+    http = MagicMock()
+    http.post.return_value = _Res(200, {"id": _VERSION, "version": "0.1.0", "state": "draft"})
+    client = DevClient(http, "https://api.example")
+    client.push(package)
+    archive = http.post.call_args.kwargs["files"]["package"][1]
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+        names = set(tar.getnames())
+    assert "spec.yaml" in names
+    assert "instructions.md" in names
+    assert "keep.txt" in names
+    assert ".aifluxxignore" in names
+    assert not any(name == "sdk" or name.startswith("sdk/") for name in names)
+    assert not any(part.endswith(".egg-info") for name in names for part in Path(name).parts)
+    assert not any(name == "vendor" or name.startswith("vendor/") for name in names)
