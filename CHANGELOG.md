@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-10-31
+
 ### Added
 
 - `aifluxx init SLUG --venv` creates `SLUG/.venv` with `python -m venv`. The default `--no-venv` scaffolds the package only. `.venv` stays on the machine: `validate` skips it, and `push` leaves it out of the upload.
