@@ -1,5 +1,6 @@
 """Companion chat, status, and layout handoff. HTTP is mocked."""
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -9,8 +10,22 @@ from typer.testing import CliRunner
 from aifluxx_sdk.cli import app
 from aifluxx_sdk.layout import default_layout, serialize_layout
 
-runner = CliRunner()
+# GitHub Actions forces a colour terminal. Rich then styles each hyphen, so
+# the literal "--mode" is split by ANSI and a narrow wrap. Pin a wide dumb
+# terminal, and strip any codes that still leak into help text.
+_HELP_ENV = {
+    "NO_COLOR": "1",
+    "TERM": "dumb",
+    "COLUMNS": "160",
+    "LINES": "40",
+}
+runner = CliRunner(env=_HELP_ENV)
+_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 KEY = "afx_dev_supersecretkey9999"
+
+
+def _plain(text: str) -> str:
+    return _ANSI.sub("", text)
 
 
 def _login(tmp_path: Path, monkeypatch, url: str = "https://api.example") -> None:
@@ -321,13 +336,13 @@ def test_layout_save_is_not_applied_on_no(tmp_path: Path, monkeypatch):
 
 
 def test_help_and_readme_mention_companion(tmp_path: Path):
-    help_text = runner.invoke(app, ["--help"]).output
+    help_text = _plain(runner.invoke(app, ["--help"]).output)
     assert "companion" in help_text
     assert "chat" in help_text
-    chat_help = runner.invoke(app, ["chat", "--help"]).output
+    chat_help = _plain(runner.invoke(app, ["chat", "--help"]).output)
     assert "--mode" in chat_help
     assert "--project" in chat_help
-    status_help = runner.invoke(app, ["companion", "status", "--help"]).output
+    status_help = _plain(runner.invoke(app, ["companion", "status", "--help"]).output)
     assert "region endpoint" in status_help.lower()
     readme = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
     assert "aifluxx companion status" in readme
