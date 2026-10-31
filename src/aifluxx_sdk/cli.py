@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -32,7 +31,9 @@ from aifluxx_sdk.templates import (
     template_rows,
 )
 
-_SECRET_FIELDS = ("api_key", "key", "secret", "token")
+# Fields that carry a secret or a hash of one. `key_once` is the value POST /api/dev/keys returns.
+_SECRET_FIELDS = ("key_once", "api_key", "key", "secret", "token")
+_REDACT_FIELDS = _SECRET_FIELDS + ("key_hash", "password", "password_hash", "hash")
 _STATE_LABELS = {
     "active": "Active",
     "approved": "Approved",
@@ -89,7 +90,7 @@ app = typer.Typer(
     add_completion=False,
     help="Author an agent package and call the AIFluxx API. Signup stays on the developer site.",
 )
-keys_app = typer.Typer(no_args_is_help=True, help="List, rotate, or revoke developer API keys.")
+keys_app = typer.Typer(no_args_is_help=True, help="List, create, rotate, or revoke developer API keys.")
 app.add_typer(keys_app, name="keys")
 
 
@@ -111,9 +112,7 @@ def _die(exc: Exception) -> NoReturn:
 
 def _client() -> AifluxxClient:
     creds = load_credentials()
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
-    return AifluxxClient(url, api_key=creds.api_key)
+    return AifluxxClient(api_key=creds.api_key)
 
 
 def _package_dir(path: Path | None) -> Path:
@@ -313,6 +312,23 @@ def _new_secret(payload: object) -> str | None:
     return None
 
 
+def _without_secrets(payload: object) -> object:
+    if not isinstance(payload, dict):
+        return payload
+    return {key: value for key, value in payload.items() if key not in _REDACT_FIELDS}
+
+
+def _show_secret_once(payload: object, *, as_json: bool) -> str | None:
+    """Print the payload with the secret removed, then the secret on its own line."""
+    secret = _new_secret(payload)
+    _emit(_without_secrets(payload), as_json=as_json)
+    if not secret:
+        return None
+    typer.secho("New key (shown once):", fg="yellow")
+    typer.echo(secret)
+    return secret
+
+
 def _read_api_key(api_key: str | None, api_key_stdin: bool) -> str:
     if api_key is not None and api_key_stdin:
         _die(AifluxxError("Pass the key with --api-key or --api-key-stdin, not both."))
@@ -406,18 +422,13 @@ def currency_for_account(account: object | None) -> str:
     return "USD"
 
 
-def _scaffold_api_url() -> str | None:
-    """API root already chosen for this machine, without calling the host.
+def _scaffold_api_url() -> str:
+    """API root for template tool ids. Does not call the host.
 
-    ``AIFLUXX_API_URL`` wins, then the saved login URL. None when neither is set.
+    Same order as every other command: ``AIFLUXX_API_URL``, then the saved
+    login URL, then production.
     """
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    if override:
-        return normalize_api_url(override)
-    try:
-        return load_credentials().url
-    except AuthError:
-        return None
+    return resolve_api_url()
 
 
 def _account_for_scaffold() -> dict[str, Any] | None:
@@ -426,10 +437,8 @@ def _account_for_scaffold() -> dict[str, Any] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
     try:
-        return _verify_credentials(url, creds.api_key)
+        return _verify_credentials(resolve_api_url(), creds.api_key)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         typer.secho(f"Could not read the org currency ({exc}). Using USD.", err=True, fg="yellow")
         return None
@@ -465,8 +474,7 @@ def _host_read_tools() -> frozenset[str] | None:
         creds = load_credentials()
     except AuthError:
         return None
-    override = os.environ.get("AIFLUXX_API_URL", "").strip()
-    url = normalize_api_url(override) if override else creds.url
+    url = resolve_api_url()
     try:
         with AifluxxClient(url, api_key=creds.api_key) as client:
             names = client.dev.read_tool_names()
@@ -528,7 +536,10 @@ def login(
     url: str | None = typer.Option(
         None,
         "--url",
-        help="API root. Overrides --platform and AIFLUXX_API_URL. Default https://api.aifluxx.co.za.",
+        help=(
+            "API root. Overrides --platform, AIFLUXX_API_URL, and the saved login URL. "
+            "Default https://api.aifluxx.co.za."
+        ),
     ),
     platform: str | None = typer.Option(None, "--platform", help=_platform_help()),
 ) -> None:
@@ -731,6 +742,29 @@ def _run_failure_message(state: str, error: str | None) -> str:
     return plain
 
 
+def _run_usage() -> str:
+    prog = _prog()
+    return (
+        f"Usage: {prog} run PROMPT\n"
+        f"       {prog} run SLUG PROMPT\n"
+        f"       {prog} run --slug SLUG PROMPT\n"
+        "Pass a prompt, or pipe one on stdin."
+    )
+
+
+def _run_parts(parts: list[str] | None) -> list[str]:
+    """Arguments for run. With none, the prompt is one stdin read, or a usage error."""
+    given = [part.strip() for part in (parts or []) if part and part.strip()]
+    if given:
+        return given
+    if not _interactive():
+        prompt = sys.stdin.read().strip()
+        if prompt:
+            return [prompt]
+    typer.echo(_run_usage(), err=True)
+    raise typer.Exit(code=1)
+
+
 def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tuple[str, str, Path | None]:
     if len(parts) == 1:
         prompt = parts[0]
@@ -755,7 +789,11 @@ def _run_target(parts: list[str], slug_opt: str | None, path: Path | None) -> tu
 
 @app.command("run")
 def run_cmd(
-    parts: list[str] = typer.Argument(..., metavar="[SLUG] PROMPT", help="Prompt, or slug then prompt."),
+    parts: list[str] | None = typer.Argument(
+        None,
+        metavar="[SLUG] PROMPT",
+        help="Prompt, or slug then prompt. Omit this and pipe a prompt on stdin.",
+    ),
     path: Path | None = typer.Option(None, "--path", help="Package folder when you pass only a prompt."),
     slug: str | None = typer.Option(None, "--slug", help="Package slug. Use this or the SLUG argument, not both."),
     version: str | None = typer.Option(
@@ -766,10 +804,11 @@ def run_cmd(
 ) -> None:
     """Stream a sandbox run. Inside a package, pass the prompt. Otherwise pass SLUG then the prompt.
 
+    With no prompt, a pipe supplies it. A terminal with no prompt prints usage.
     Exits 1 when the stream's final state is failed or errored.
     """
     try:
-        package_slug, prompt, package = _run_target(parts, slug, path)
+        package_slug, prompt, package = _run_target(_run_parts(parts), slug, path)
         lock = load_lock(package) if package is not None else None
         outcome: tuple[str, str | None] | None = None
         with _client() as client:
@@ -853,6 +892,34 @@ def keys_list(
     _emit(payload, as_json=_as_json(ctx, json_output))
 
 
+@keys_app.command("create")
+def keys_create(
+    ctx: typer.Context,
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="Key name. Omit it and the API uses Sandbox key. At most 80 characters.",
+    ),
+    save: bool = typer.Option(False, "--save", help="Write the new secret into the local credentials file."),
+    json_output: bool = _json_option(),
+) -> None:
+    """Create a developer API key with POST /api/dev/keys. The secret is shown once."""
+    try:
+        with _client() as client:
+            payload = client.dev.create_key(name)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    secret = _show_secret_once(payload, as_json=_as_json(ctx, json_output))
+    if not secret or not save:
+        return
+    try:
+        current = load_credentials()
+        store = save_credentials(Credentials(url=current.url, api_key=secret))
+    except (AifluxxError, OSError) as exc:
+        _die(exc)
+    typer.echo(f"Updated {store}.")
+
+
 @keys_app.command("rotate")
 def keys_rotate(
     ctx: typer.Context,
@@ -866,18 +933,8 @@ def keys_rotate(
             payload = client.dev.rotate_key(key_id)
     except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
         _die(exc)
-    secret = _new_secret(payload)
-    as_json = _as_json(ctx, json_output)
-    if isinstance(payload, dict):
-        shown = {key: value for key, value in payload.items() if key not in _SECRET_FIELDS}
-        _emit(shown, as_json=as_json)
-    else:
-        _emit(payload, as_json=as_json)
-    if not secret:
-        return
-    typer.secho("New key (shown once):", fg="yellow")
-    typer.echo(secret)
-    if not save:
+    secret = _show_secret_once(payload, as_json=_as_json(ctx, json_output))
+    if not secret or not save:
         return
     try:
         current = load_credentials()

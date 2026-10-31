@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aifluxx_sdk.cli import _client, _verify_credentials, app, currency_for_account
-from aifluxx_sdk.credentials import load_credentials
+from aifluxx_sdk.credentials import DEV_URL, load_credentials
 from aifluxx_sdk.exceptions import AuthError
 
 # GitHub Actions sets GITHUB_ACTIONS, and Typer then forces a colour terminal.
@@ -222,6 +222,34 @@ def test_login_uses_env_url(tmp_path: Path, monkeypatch, allow_login):
     assert load_credentials(store).url == "https://api.example"
 
 
+def test_saved_dev_login_url_is_reused(tmp_path: Path, monkeypatch, allow_login):
+    store = tmp_path / "credentials"
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    logged_in = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", DEV_URL])
+    assert logged_in.exit_code == 0, logged_in.output
+    assert load_credentials(store).url == DEV_URL
+    client = _client()
+    try:
+        assert client.url == DEV_URL
+        assert client.mcp_url == f"{DEV_URL}/mcp/"
+    finally:
+        client.close()
+    monkeypatch.setenv("AIFLUXX_API_URL", "https://api.override")
+    overridden = _client()
+    try:
+        assert overridden.url == "https://api.override"
+        assert overridden.mcp_url == "https://api.override/mcp/"
+    finally:
+        overridden.close()
+    explicit = runner.invoke(
+        app,
+        ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"],
+    )
+    assert explicit.exit_code == 0, explicit.output
+    assert load_credentials(store).url == "https://api.example"
+
+
 def test_env_url_overrides_saved_credentials(tmp_path: Path, monkeypatch):
     store = tmp_path / "credentials"
     store.write_text('{"url": "https://api.saved", "api_key": "afx_dev_k"}\n', encoding="utf-8")
@@ -316,6 +344,52 @@ def test_keys_list_rotate_revoke(tmp_path: Path, monkeypatch):
     assert "revoked" in _text(revoked).lower()
 
 
+def test_keys_create_shows_the_secret_once(tmp_path: Path, monkeypatch):
+    store = tmp_path / "credentials"
+    store.write_text('{"url": "https://api.example", "api_key": "afx_dev_k"}\n', encoding="utf-8")
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    seen: dict[str, str | None] = {}
+
+    class _Dev:
+        def create_key(self, name=None):
+            seen["name"] = name
+            return {
+                "id": "k9",
+                "name": name or "Sandbox key",
+                "prefix": "afx_dev_",
+                "key_once": "afx_dev_created_secret",
+                "key_hash": "not-the-secret",
+            }
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    created = runner.invoke(app, ["keys", "create", "--name", "laptop", "--save"])
+    text = _text(created)
+    assert created.exit_code == 0, text
+    assert seen["name"] == "laptop"
+    assert text.count("afx_dev_created_secret") == 1
+    assert "shown once" in text
+    assert "not-the-secret" not in text
+    assert "key_once" not in text
+    assert load_credentials(store).api_key == "afx_dev_created_secret"
+    raw = runner.invoke(app, ["keys", "create", "--json"])
+    assert raw.exit_code == 0, raw.output
+    assert seen["name"] is None
+    assert raw.output.count("afx_dev_created_secret") == 1
+    assert "key_once" not in raw.output
+    assert "key_hash" not in raw.output
+    assert '"id": "k9"' in raw.output
+
+
 def test_run_reads_slug_from_package_or_argument(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
@@ -404,6 +478,40 @@ def test_run_exits_nonzero_when_final_state_failed_or_errored(tmp_path: Path, mo
     assert "Run failed." in _text(bare)
 
 
+def test_run_without_prompt_prints_usage_or_reads_stdin(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    missing = runner.invoke(app, ["run"])
+    text = _text(missing)
+    assert missing.exit_code == 1
+    assert "Usage:" in text
+    assert "PROMPT" in text
+    assert "stdin" in text
+    created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
+    assert created.exit_code == 0, created.output
+    monkeypatch.chdir(tmp_path / "my-agent")
+    seen: dict[str, str] = {}
+
+    class _Dev:
+        def run(self, slug, prompt, *, version=None, lock=None):
+            seen["slug"] = slug
+            seen["prompt"] = prompt
+            yield "ok"
+
+    class _Fake:
+        dev = _Dev()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr("aifluxx_sdk.cli._client", lambda: _Fake())
+    piped = runner.invoke(app, ["run"], input="piped prompt\n")
+    assert piped.exit_code == 0, piped.output
+    assert seen == {"slug": "my-agent", "prompt": "piped prompt"}
+
+
 def test_run_outside_package_requires_slug(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["run", "just a prompt"])
@@ -433,6 +541,8 @@ def test_readme_install_dev_login_and_brand():
     assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
     assert "aifluxx-sdk @ git+" not in readme
     assert "aifluxx login --platform dev" in readme
+    assert "dev.aifluxx.co.za/mcp/" in readme
+    assert "AIFLUXX_API_URL" in readme
     assert "AIFluxx" in readme
     assert "AIfluxx" not in readme
 
@@ -444,7 +554,7 @@ def test_login_help_lists_dev_platform_and_stdin():
     assert "--platform" in text
     assert "--api-key-stdin" in text
     flat = _flat(text)
-    assert "dev.developer.aifluxx.co.za" in flat
+    assert "dev.aifluxx.co.za" in flat
     assert "aifluxx (https://api.aifluxx.co.za)" in flat
     assert "aifluxx login --platform dev" in flat
     assert "production" in flat.lower()
@@ -460,7 +570,7 @@ def test_login_prints_platform(tmp_path: Path, monkeypatch, allow_login):
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     dev_text = _text(dev)
     assert dev.exit_code == 0, dev_text
-    assert "Logging in to dev (https://dev.developer.aifluxx.co.za)." in dev_text
+    assert "Logging in to dev (https://dev.aifluxx.co.za)." in dev_text
     assert "production" not in dev_text
     custom = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--url", "https://api.example"])
     custom_text = _text(custom)
@@ -474,7 +584,7 @@ def test_login_platform_dev(tmp_path: Path, monkeypatch, allow_login):
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     dev = runner.invoke(app, ["login", "--api-key", "afx_dev_test_key", "--platform", "dev"])
     assert dev.exit_code == 0, dev.output
-    assert load_credentials(store).url == "https://dev.developer.aifluxx.co.za"
+    assert load_credentials(store).url == "https://dev.aifluxx.co.za"
     assert "production" not in _text(dev)
     assert "Saved" in _text(dev)
 

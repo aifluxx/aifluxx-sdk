@@ -18,7 +18,7 @@ You need an approved developer account to get an API key. Sign up at https://dev
 
 ## Log in
 
-`aifluxx login` defaults to production: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key.
+`aifluxx login` uses production when no other host is set: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key. A URL already saved in the credentials file is used before that default, so `aifluxx login --url https://dev.aifluxx.co.za` keeps later commands on the dev host. Pass `--platform aifluxx` or `--url https://api.aifluxx.co.za` to save production again.
 
 Keys from Home start with `afx_dev_`. That prefix is the developer key on production and on the dev host. Paste the one Home showed:
 
@@ -46,19 +46,19 @@ Override the host for this login with `--url`, or for every command in the curre
 
 ```bash
 aifluxx login --url https://api.aifluxx.co.za --api-key afx_dev_…
-export AIFLUXX_API_URL=https://dev.developer.aifluxx.co.za
+export AIFLUXX_API_URL=https://dev.aifluxx.co.za
 ```
 
-`--url` wins over `--platform`, which wins over `AIFLUXX_API_URL`. When `AIFLUXX_API_URL` is set, later commands use it instead of the URL saved at login.
+The API root is chosen in this order: `--url` (or the `url` argument to `AifluxxClient`), then `--platform`, then `AIFLUXX_API_URL`, then the URL saved in `~/.aifluxx/credentials`, then `https://api.aifluxx.co.za`. When `AIFLUXX_API_URL` is unset, later commands use the saved login URL, including a dev host from `aifluxx login --url https://dev.aifluxx.co.za` or `aifluxx login --platform dev`.
 
 Named platforms:
 
 | `--platform` | API root |
 |---|---|
 | `aifluxx` | `https://api.aifluxx.co.za` |
-| `dev` | `https://dev.developer.aifluxx.co.za` |
+| `dev` | `https://dev.aifluxx.co.za` |
 
-`dev` is the ZA dev developer API (the same origin as `https://dev.developer.aifluxx.co.za`). `aifluxx` is production. Any other host is a custom `--url`.
+`dev` is the dev API at `https://dev.aifluxx.co.za`. `aifluxx` is production. Any other host is a custom `--url`.
 
 ```bash
 aifluxx login --platform dev
@@ -96,7 +96,7 @@ aifluxx submit
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.
 
-`run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API.
+`run` takes a prompt, and a slug when you are not inside the package. Inside the package directory, `aifluxx run PROMPT` reads the slug from `spec.yaml`. Otherwise pass it: `aifluxx run SLUG PROMPT` or `aifluxx run PROMPT --slug SLUG`. The same slug is the one `run` sends to the API. With no prompt, `aifluxx run` reads one prompt from stdin. In a terminal, no prompt prints usage and exits 1.
 
 `submit` and `run` call `/api/dev/agents/{slug}/versions/{version_id}/...`. `version_id` is a UUID. The CLI does not send the word `latest` or a semver such as `0.1.0` in that path. It uses the UUID saved at push, or looks the slug up with `GET /api/dev/agents`. Pass `--version <uuid>` to choose one yourself. A semver passed to `--version` is looked up, not sent as the path id.
 
@@ -134,10 +134,11 @@ Sign up for a developer account at https://developer.aifluxx.co.za/signup. For h
 | Command | Request |
 |---|---|
 | `aifluxx keys list` | `GET /api/dev/keys` |
+| `aifluxx keys create` | `POST /api/dev/keys` |
 | `aifluxx keys rotate <id>` | `POST /api/dev/keys/{id}/rotate` |
 | `aifluxx keys revoke <id>` | `POST /api/dev/keys/{id}/revoke` |
 
-List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Rotate prints a new secret once. `--save` on rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
+List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Create and rotate print the new secret once (`key_once`); it is left out of the text view and the JSON payload. `--name` on create sets the name (at most 80 characters). Omit it and the API uses `Sandbox key`. `--save` on create or rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
 
 ## Python
 
@@ -154,6 +155,8 @@ client.mail.send(
 )
 ```
 
+Omit `url` and the client uses the same order as the CLI: `AIFLUXX_API_URL`, then the saved login URL, then production. `AifluxxClient(api_key="afx_dev_…")` is that form. `client.mcp_url` is the MCP endpoint for whichever root was resolved.
+
 `client.mail.mailboxes(business_id=…)` lists connected identities you may name as `from_`. `from_` is required and must match a connected mailbox (`imap_mail`, `gmail_mail`, or `ms_graph_mail`). Send is immediate. The key must be a company admin or delegate. Multi-business users pass `business_id`.
 
 `client.send(...)` (A2A chat with an agent) is **coming soon / not yet available**. It currently raises `NotImplementedError`; use `aifluxx run` (or the developer runs API) to run an agent today. Mail send does not use it.
@@ -168,7 +171,7 @@ Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_�
 
 ## MCP
 
-MCP clients talk to the host. This package does not embed an MCP server. Use the HTTPS URL with a trailing slash:
+MCP clients talk to the host. This package does not embed an MCP server. The MCP URL is the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.aifluxx.co.za/mcp/`. `AifluxxClient.mcp_url` returns that URL for the client.
 
 ```json
 {

@@ -93,6 +93,14 @@ def test_keys_call_dev_paths():
     http.post.assert_called_with("https://api.example/api/dev/keys/k1/rotate")
     client.revoke_key("k1")
     http.post.assert_called_with("https://api.example/api/dev/keys/k1/revoke")
+    client.create_key("laptop")
+    http.post.assert_called_with("https://api.example/api/dev/keys", json={"name": "laptop"})
+    client.create_key()
+    http.post.assert_called_with("https://api.example/api/dev/keys", json={})
+    with pytest.raises(AifluxxError, match="80"):
+        client.create_key("x" * 81)
+    with pytest.raises(AifluxxError, match="name"):
+        client.create_key("   ")
 
 
 def test_key_id_rejects_slash():
@@ -341,6 +349,23 @@ def test_307_to_http_is_reported():
     text = str(caught.value)
     assert "307" in text
     assert "downgrad" in text
+    assert "https://api.aifluxx.co.za/mcp/" in text
+
+
+def test_307_mcp_hint_follows_the_api_host():
+    http = MagicMock()
+    http.get.return_value = _Res(
+        307,
+        headers={"location": "http://dev.aifluxx.co.za/mcp/"},
+        method="GET",
+        url="https://dev.aifluxx.co.za/mcp",
+    )
+    client = DevClient(http, "https://dev.aifluxx.co.za")
+    with pytest.raises(AifluxxError, match="https://dev.aifluxx.co.za/mcp/") as caught:
+        client.me()
+    text = str(caught.value)
+    assert "downgrad" in text
+    assert "https://api.aifluxx.co.za/mcp/" not in text
 
 
 class _Unread:

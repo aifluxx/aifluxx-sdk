@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.credentials import (
     DEFAULT_URL,
     DEV_URL,
@@ -11,6 +12,7 @@ from aifluxx_sdk.credentials import (
     Credentials,
     credentials_path,
     load_credentials,
+    mcp_url,
     resolve_api_url,
     save_credentials,
     _windows_dacl_is_current_user_only,
@@ -19,23 +21,60 @@ from aifluxx_sdk.exceptions import AuthError
 from aifluxx_sdk.lockfile import AgentLock, load_lock, save_lock
 
 
-def test_default_url_is_aifluxx(monkeypatch):
+def test_default_url_is_aifluxx(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing"))
     assert DEFAULT_URL == "https://api.aifluxx.co.za"
     assert resolve_api_url() == DEFAULT_URL
+    assert mcp_url() == f"{DEFAULT_URL}/mcp/"
     assert set(PLATFORMS) == {"aifluxx", "dev"}
     assert PLATFORMS["aifluxx"] == DEFAULT_URL
-    assert PLATFORMS["dev"] == DEV_URL
+    assert DEV_URL == "https://dev.aifluxx.co.za"
+    assert PLATFORMS["dev"] == "https://dev.aifluxx.co.za"
 
 
-def test_platform_and_url_precedence(monkeypatch):
+def test_platform_and_url_precedence(monkeypatch, tmp_path: Path):
+    store = tmp_path / "credentials"
+    save_credentials(Credentials(url=DEV_URL, api_key="afx_dev_k"), store)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
     monkeypatch.setenv("AIFLUXX_API_URL", "https://api.example/from-env/")
     assert resolve_api_url() == "https://api.example/from-env"
     assert resolve_api_url(platform="aifluxx") == DEFAULT_URL
     assert resolve_api_url(platform="dev") == DEV_URL
     assert resolve_api_url(url="https://api.example/root/", platform="dev") == "https://api.example/root"
+    assert mcp_url("https://api.example/root/") == "https://api.example/root/mcp/"
     with pytest.raises(AuthError, match="Unknown platform"):
         resolve_api_url(platform="nope")
+
+
+def test_saved_dev_url_is_used_when_env_is_unset(monkeypatch, tmp_path: Path):
+    store = tmp_path / "credentials"
+    save_credentials(Credentials(url=f"{DEV_URL}/", api_key="afx_dev_k"), store)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    assert resolve_api_url() == DEV_URL
+    assert mcp_url() == f"{DEV_URL}/mcp/"
+    client = AifluxxClient(api_key="afx_dev_k")
+    try:
+        assert client.url == DEV_URL
+        assert client.mcp_url == f"{DEV_URL}/mcp/"
+    finally:
+        client.close()
+    explicit = AifluxxClient("https://api.example/root/", api_key="afx_dev_k")
+    try:
+        assert explicit.url == "https://api.example/root"
+        assert explicit.mcp_url == "https://api.example/root/mcp/"
+    finally:
+        explicit.close()
+
+
+def test_saved_custom_url_is_used_before_prod(monkeypatch, tmp_path: Path):
+    store = tmp_path / "credentials"
+    save_credentials(Credentials(url="https://api.example/root/", api_key="afx_dev_k"), store)
+    monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(store))
+    monkeypatch.delenv("AIFLUXX_API_URL", raising=False)
+    assert resolve_api_url() == "https://api.example/root"
+    assert mcp_url() == "https://api.example/root/mcp/"
 
 
 def test_default_store_is_aifluxx_home(tmp_path: Path, monkeypatch):

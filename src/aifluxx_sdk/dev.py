@@ -7,11 +7,12 @@ import re
 import tarfile
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
 from aifluxx_sdk.catalog import parse_tool_catalogue
+from aifluxx_sdk.credentials import mcp_url
 from aifluxx_sdk.exceptions import AifluxxError, AuthError, Forbidden, HostUnavailable
 from aifluxx_sdk.lockfile import AgentLock, save_lock
 from aifluxx_sdk.package import LOCAL_META_DIRS, validate_package
@@ -137,6 +138,18 @@ class DevClient:
     def list_keys(self) -> Any:
         return self._json(self._http.get(f"{self._api_root}/api/dev/keys"))
 
+    def create_key(self, name: str | None = None) -> Any:
+        """POST /api/dev/keys. ``name`` defaults to Sandbox key on the server. Max 80 characters."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            cleaned = name.strip()
+            if not cleaned:
+                raise AifluxxError("Enter a name for this key.")
+            if len(cleaned) > 80:
+                raise AifluxxError("Key name must be 80 characters or fewer.")
+            body["name"] = cleaned
+        return self._json(self._http.post(f"{self._api_root}/api/dev/keys", json=body))
+
     def rotate_key(self, key_id: str) -> Any:
         return self._json(self._http.post(self._key_path(key_id, "rotate")))
 
@@ -213,9 +226,20 @@ def _redirect_message(res: httpx.Response) -> str:
     message = f"{where}: redirects to {target}."
     if location.startswith("http://"):
         message += " The Location URL is http, so the host is downgrading TLS."
-    if "/mcp" in str(getattr(getattr(res, "request", None), "url", "")) or "/mcp" in location:
-        message += " For MCP, use the https URL exactly as shown: https://api.aifluxx.co.za/mcp/"
+    request_url = str(getattr(getattr(res, "request", None), "url", "") or "")
+    if "/mcp" in request_url or "/mcp" in location:
+        hinted = _mcp_hint(location if "/mcp" in location else request_url)
+        if hinted:
+            message += f" For MCP, use the https URL exactly as shown: {hinted}"
     return message
+
+
+def _mcp_hint(raw: str) -> str | None:
+    """HTTPS MCP URL for the host in ``raw``. None when ``raw`` has no host."""
+    netloc = urlsplit(raw).netloc
+    if not netloc:
+        return None
+    return mcp_url(f"https://{netloc}")
 
 
 def _detail(res: httpx.Response) -> str:

@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const DEFAULT_API_ROOT = "https://api.aifluxx.co.za";
-export const MCP_URL = "https://api.aifluxx.co.za/mcp/";
+
+/** MCP endpoint for an API root. The trailing slash is required. */
+export function mcpUrlFor(apiRoot: string): string {
+  return `${normalizeApiRoot(apiRoot)}/mcp/`;
+}
 
 export interface ProxyConfig {
   mock: boolean;
@@ -37,8 +41,8 @@ export function maskKey(key: string | null): string | null {
   return `afx_dev_…${key.slice(-4)}`;
 }
 
-function readCredentials(): { url?: string; api_key?: string } | null {
-  const override = process.env.AIFLUXX_CREDENTIALS?.trim();
+function readCredentials(env: NodeJS.ProcessEnv): { url?: string; api_key?: string } | null {
+  const override = env.AIFLUXX_CREDENTIALS?.trim();
   const path = override || join(homedir(), ".aifluxx", "credentials");
   if (!existsSync(path)) return null;
   try {
@@ -53,21 +57,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
   const get = (k: string) => (env[k]?.trim() || local[k]?.trim() || "");
   let apiKey: string | null = null;
   let keySource: ProxyConfig["keySource"] = null;
-  let credUrl = "";
+  const creds = readCredentials(env);
   if (env.AIFLUXX_API_KEY?.trim()) {
     apiKey = env.AIFLUXX_API_KEY.trim();
     keySource = "env";
   } else if (local.AIFLUXX_API_KEY?.trim()) {
     apiKey = local.AIFLUXX_API_KEY.trim();
     keySource = ".env.local";
-  } else {
-    const creds = readCredentials();
-    if (creds?.api_key) {
-      apiKey = String(creds.api_key).trim();
-      keySource = "credentials";
-      credUrl = String(creds.url || "");
-    }
+  } else if (creds?.api_key) {
+    apiKey = String(creds.api_key).trim();
+    keySource = "credentials";
   }
+  // Explicit env / .env.local URL, then the URL saved by `aifluxx login`, then production.
+  const credUrl = creds?.url ? String(creds.url) : "";
   const apiRoot = normalizeApiRoot(get("AIFLUXX_API_URL") || credUrl || DEFAULT_API_ROOT);
   const mockFlag = ["1", "true", "yes"].includes(get("AIFLUXX_MOCK").toLowerCase());
   return { mock: mockFlag || !apiKey, apiRoot, apiKey, keySource };

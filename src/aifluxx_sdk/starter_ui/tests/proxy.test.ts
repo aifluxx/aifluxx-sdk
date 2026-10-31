@@ -1,7 +1,10 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../server/app";
 import { isAllowed } from "../server/allowlist";
-import { loadConfig, maskKey, parseDotenv, type ProxyConfig } from "../server/config";
+import { loadConfig, maskKey, mcpUrlFor, parseDotenv, type ProxyConfig } from "../server/config";
 
 const V = "11111111-1111-4111-8111-111111111111";
 const live: ProxyConfig = { mock: false, apiRoot: "https://api.example.com", apiKey: "afx_dev_testkey_abcd", keySource: "env" };
@@ -30,6 +33,22 @@ describe("config", () => {
     expect(maskKey("afx_dev_secretvalue1234")).toBe("afx_dev_…1234");
     expect(parseDotenv("# c\nA=1\nB=\"two\"\n")).toEqual({ A: "1", B: "two" });
   });
+  it("uses a saved dev URL and derives the MCP URL from it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aifluxx-"));
+    const creds = join(dir, "credentials");
+    writeFileSync(creds, JSON.stringify({ url: "https://dev.aifluxx.co.za/", api_key: "afx_dev_savedkey1234" }));
+    const saved = loadConfig({ AIFLUXX_CREDENTIALS: creds } as NodeJS.ProcessEnv, "/nonexistent");
+    expect(saved.mock).toBe(false);
+    expect(saved.apiRoot).toBe("https://dev.aifluxx.co.za");
+    expect(saved.keySource).toBe("credentials");
+    expect(mcpUrlFor(saved.apiRoot)).toBe("https://dev.aifluxx.co.za/mcp/");
+    const fromEnvKey = loadConfig({ AIFLUXX_CREDENTIALS: creds, AIFLUXX_API_KEY: "afx_dev_envkey1234" } as NodeJS.ProcessEnv, "/nonexistent");
+    expect(fromEnvKey.keySource).toBe("env");
+    expect(fromEnvKey.apiRoot).toBe("https://dev.aifluxx.co.za");
+    const overridden = loadConfig({ AIFLUXX_CREDENTIALS: creds, AIFLUXX_API_URL: "https://api.example/root/" } as NodeJS.ProcessEnv, "/nonexistent");
+    expect(overridden.apiRoot).toBe("https://api.example/root");
+    expect(mcpUrlFor(overridden.apiRoot)).toBe("https://api.example/root/mcp/");
+  });
 });
 
 describe("proxy", () => {
@@ -44,6 +63,10 @@ describe("proxy", () => {
     expect(seen?.redirect).toBe("manual");
     const cfg = await (await app.request("/local/config")).text();
     expect(cfg).not.toContain("testkey");
+    const dev = createApp({ config: { ...live, apiRoot: "https://dev.aifluxx.co.za" } });
+    const body = await (await dev.request("/local/config")).json();
+    expect(body.mcpUrl).toBe("https://dev.aifluxx.co.za/mcp/");
+    expect(body.mcpUrl).not.toBe("https://api.aifluxx.co.za/mcp/");
   });
   it("blocks redirects and flags http downgrades", async () => {
     const app = createApp({ config: live, fetchImpl: (async () => new Response(null, { status: 307, headers: { location: "http://api.example.com/mcp" } })) as never });
