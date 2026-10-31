@@ -431,3 +431,15 @@ def test_tarball_skips_local_meta(tmp_path: Path):
     with tarfile.open(fileobj=io.BytesIO(_tarball(package)), mode="r:gz") as archive:
         names = archive.getnames()
     assert names == ["spec.yaml"]
+
+
+def test_tarball_skips_venv(tmp_path: Path):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "spec.yaml").write_text("schema: aifluxx/agent/v1\n", encoding="utf-8")
+    venv = package / ".venv"
+    venv.mkdir()
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    with tarfile.open(fileobj=io.BytesIO(_tarball(package)), mode="r:gz") as archive:
+        names = archive.getnames()
+    assert names == ["spec.yaml"]

@@ -4,6 +4,36 @@ Python client and `aifluxx` command-line tool for [AIFluxx](https://aifluxx.co.z
 
 Signup, docs, and the developer site stay on the AIFluxx host. This repository does not ship a UI.
 
+## Install with Cursor
+
+Open Cursor, copy the prompt below, and paste it into Cursor's chat. Cursor sets up everything.
+
+```text
+Set up aifluxx in this workspace.
+
+Check that Python is 3.11 or newer. Run `python3 --version` or `python --version`. Stop if it is older than 3.11.
+
+Optionally create and activate a virtual environment, then install into it. Skip this if I want the current environment.
+- bash: `python -m venv .venv` then `source .venv/bin/activate`
+- Windows PowerShell: `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
+
+Install aifluxx 1.2.0:
+
+pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.2.0
+
+Run `aifluxx login`. Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there.
+
+Scaffold a package. Use the slug I give you, or ask me for one.
+- With a virtual environment inside the package: `aifluxx init <project> --venv`
+  This writes spec.yaml, instructions.md, README.md, and samples.yaml, and creates `<project>/.venv` with `python -m venv` using the Python that is running `aifluxx`. That directory is local. Do not commit it. `aifluxx push` does not upload it. It is separate from the environment used to pip install aifluxx.
+- Without one: `aifluxx init <project> --no-venv`
+  This is the default. Plain `aifluxx init <project>` does the same. The same files are written, and no `.venv` is created.
+
+Then run `aifluxx validate <project>`. `aifluxx validate` with no path only works when the current directory contains spec.yaml, so change into `<project>` first if you omit the path.
+
+Report what you did: the Python version, whether you created and activated an install virtual environment, the pip command, whether login saved credentials, which init command you ran and whether `<project>/.venv` exists, and the validate result.
+```
+
 ## Install
 
 Requires Python 3.11 or newer. The package is not on PyPI. Use a virtual environment.
@@ -177,7 +207,7 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`.
 
@@ -189,7 +219,7 @@ aifluxx submit
 |---|---|
 | Method and path | `POST /api/dev/agents/{slug}/versions` |
 | Request `Content-Type` | `multipart/form-data` with a boundary. The body is not raw gzip, and the request is not `Content-Type: application/gzip`. |
-| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx` and a leftover metadata directory from an older install are left out. |
+| Field `package` | File. Filename `package.tar.gz`. Part `Content-Type: application/gzip`. Bytes are a gzip-compressed ustar archive (magic `1f 8b`). Paths are relative to the package root. `.aifluxx`, a leftover metadata directory from an older install, and `.venv` are left out. |
 | Field `metadata` | Form field, no filename. Part `Content-Type: application/json`. UTF-8 JSON object: `slug`, `version` (the semver from `spec.yaml`), `schema`, and `spec` (the parsed `spec.yaml`). |
 
 The host should read `package` as an uploaded file and `metadata` as a form string, then `json.loads` that string. Gzip magic byte `0x8b` is inside the `package` part only.

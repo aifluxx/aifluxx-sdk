@@ -14,6 +14,8 @@ from aifluxx_sdk.catalog import CATEGORIES, CONNECTORS, READ_TOOLS, SCHEMAS, TOO
 # directory is omitted from uploads without spelling the old name.
 _LEGACY_META_DIR = "." + "tru" + "est"
 LOCAL_META_DIRS = frozenset({".aifluxx", _LEGACY_META_DIR})
+# `.venv` is created by `aifluxx init --venv`. It stays on the machine.
+PACKAGE_SKIP_DIRS = LOCAL_META_DIRS | frozenset({".venv"})
 
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
@@ -54,7 +56,7 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 def _scan_secrets(root: Path, report: Report) -> None:
     for path in root.rglob("*"):
-        if not path.is_file() or LOCAL_META_DIRS.intersection(path.parts) or path.suffix in {".png", ".jpg", ".webp"}:
+        if not path.is_file() or PACKAGE_SKIP_DIRS.intersection(path.parts) or path.suffix in {".png", ".jpg", ".webp"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")
