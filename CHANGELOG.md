@@ -5,6 +5,10 @@
 ### Added
 
 - `aifluxx init SLUG --venv` creates `SLUG/.venv` with `python -m venv`. The default `--no-venv` scaffolds the package only. `.venv` stays on the machine: `validate` skips it, and `push` leaves it out of the upload.
+- Optional extra `aifluxx-sdk[mcp]` (`mcp>=1.20,<2`, FastMCP). `aifluxx mcp` and `aifluxx-mcp` serve the developer platform over stdio, or streamable HTTP with `--http`. Auth is `AIFLUXX_API_KEY` or `aifluxx login`. The key is left out of config, tool results, and logs.
+- Tools wrap the published developer routes: projects and agents (`/api/dev/agents`), connector catalog and platform data schema (`/api/dev/connectors`), local manifest validation, push, submit for review, review status, and companion chat. Handoff and portfolio tools call the routes documented for platform v1.1 (aifluxx-developer PR 46) and say `requires platform v1.1` in the tool description.
+- Resources for the agent manifest schema, connector schema rules, and a stored agent manifest. Prompts `start_new_agent` and `resume_from_handoff`.
+- `aifluxx init --cursor-mcp` writes `.cursor/mcp.json` for the local server. The file does not contain an API key.
 
 ## 1.2.0 - 2026-10-31
 
