@@ -10,6 +10,7 @@ from typing import Any, NoReturn
 import httpx
 import typer
 
+from aifluxx_sdk import __version__
 from aifluxx_sdk.client import AifluxxClient
 from aifluxx_sdk.credentials import (
     PLATFORMS,
@@ -515,10 +516,23 @@ def _resolve_slug(slug: str | None) -> str:
     raise typer.Exit(code=1)
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
 def root(
     ctx: typer.Context,
     json_output: bool = typer.Option(False, "--json", help="Print API payloads as JSON."),
+    _version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Print the aifluxx-sdk version and exit.",
+    ),
 ) -> None:
     """Author an agent package and call the AIFluxx API. Signup stays on the developer site."""
     ctx.ensure_object(dict)
