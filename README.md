@@ -144,6 +144,41 @@ To pin a release, append `@` and a tag once one is published (none yet), for exa
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
 
+## Components
+
+What the SDK contains. Everything below exists in this repo unless it is marked **planned**.
+
+| Component | Where | What it does |
+|---|---|---|
+| CLI `aifluxx` | `src/aifluxx_sdk/cli.py` | `login`, `init` (with `--template`, `--list`, `--venv`, `--cursor-mcp`), `validate`, `push`, `submit`, `status`, `run`, `import-git`, `keys list/create/rotate/revoke`, `chat`, `companion status`, `starter-ui`, `source`, `mcp`. See [Log in](#log-in), [Author a package](#author-a-package) and [API keys](#api-keys). |
+| Python client | `client.py` (`AifluxxClient`, `CompanionClient`), `dev.py` (developer platform `/api/dev`) | Programmatic access. See [Python](#python). |
+| Credentials | `credentials.py` | API URL and key resolution: `AIFLUXX_API_URL`, `AIFLUXX_API_KEY`, `AIFLUXX_CREDENTIALS`, then the file saved by `aifluxx login`. |
+| Package validator | `package.py`, `catalog.py`, `lockfile.py` | Offline manifest checks with the same codes as the host, tool allow-lists (the host `GET /api/dev/tools` wins when you are logged in), and the per-package lock. |
+| Templates | `templates.py` | Starter packages for `aifluxx init --template`. See [Templates](#templates). |
+| Mail | `mail.py` | Connected-mailbox send, with the same rules as the in-app agent tool. Example: `examples/send_mail.py`. |
+| Starter UI | `src/aifluxx_sdk/starter_ui/` | Local React app (screens: Run console, Tools, Status, Settings) behind a local proxy that keeps the key server-side. Layout file: `layout.py`. See [Starter UI](#starter-ui). |
+| A2UI components | Developer portal A2UI SDK (`aifluxx-a2ui-sdk` registry, 104 entries) | UI building blocks the companion's `build` mode and the Starter UI use. Examples: DataTable, ChatPanel, Bar/Line/Area charts, Stat/KPI, Timeline, ApprovalGate, AgentRunStatus, ToolCallTrace, StreamingOutput, UsageMeter (tokens/cost ZAR), API key management, Permissions matrix, Citations/Sources and Tree view. A graph view component is **planned**. |
+| Companion | `aifluxx chat` / `aifluxx companion` | See [Companion](#companion). |
+| MCP server | `mcp_server.py` (extra `aifluxx-sdk[mcp]`) | Tools for projects, agents, connectors, validate, push, review, companion, handoffs and portfolios. See [MCP server](#mcp-server). Cursor config comes from `aifluxx init --cursor-mcp`. |
+| Source copy | `source.py` | `aifluxx source` writes the SDK sources into a project folder. |
+
+## Templates
+
+```bash
+aifluxx init --list                      # show templates
+aifluxx init my-agent --template finance # scaffold from a template
+```
+
+| Template | Purpose |
+|---|---|
+| `compliance` | Lists open obligations and missing evidence from documents the caller can already see. |
+| `finance` | Explains period movements in plain language, with a citation on every number. |
+| `qa-over-documents` | Answers questions from named connectors. Read only, no write tools. |
+| `standup` | Covers yesterday, today and blockers from tasks and mail the user can already see. |
+| `account-snapshot` | Builds a one-page account brief from CRM notes and vault files. |
+
+Then `aifluxx validate`, `aifluxx push`, `aifluxx submit`. Tool ids match `GET /api/dev/templates` on the host.
+
 ## Log in
 
 `aifluxx login` uses production when no other host is set: platform `aifluxx`, API root `https://api.aifluxx.co.za`. It prints that platform before it checks the key. A URL already saved in the credentials file is used before that default, so `aifluxx login --url https://dev.aifluxx.co.za` keeps later commands on the dev host. Pass `--platform aifluxx` or `--url https://api.aifluxx.co.za` to save production again.
@@ -435,6 +470,36 @@ Agents read connector data through `connectors_read_schema`. They do not receive
 ### Host MCP URL
 
 `AifluxxClient.mcp_url` is still the host endpoint: the resolved API root plus `/mcp/`, with a trailing slash. Production is `https://api.aifluxx.co.za/mcp/`. A dev login uses `https://dev.aifluxx.co.za/mcp/`. That URL is the platform host. The server in this section runs locally and calls the developer API with the SDK client.
+
+## Signals
+
+**Planned.** There is no developer signals endpoint in the SDK yet. Once it ships, a developer can read only the signal types their project is granted for companies their project is granted. Person and PII signals are restricted. The planned shape is:
+
+```python
+# planned, not yet available
+for s in client.signals.list(company_id, types=["<signal_type>"], since="2026-10-01"):
+    ...
+client.signal_types.list()
+```
+
+Today the platform's admin dashboards build developer activity signals (`signup`, `push`, `validation`, `submission`, `failure`, `handoff`, `connector_use`). Those are for platform admins and are not exposed to developers.
+
+## Tracing with Langfuse
+
+**Planned for the SDK.** The SDK does not send traces itself yet. The AIFluxx platform traces hosted agent runs in its own Langfuse, which is separate from the UAE Langfuse; never point an AIFluxx agent at the UAE instance. For local runs, set the standard Langfuse variables in `.env` (names only; take the values from your AIFluxx Langfuse project, never commit them):
+
+```
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=
+LANGFUSE_TRACING_ENVIRONMENT=
+```
+
+## Demo companies (dev sandbox)
+
+The dev sandbox has 11 **fictitious** South African demo companies: Biltong & Bougainvillea Retail, Vaalkop Mining, Karoo Kraal Industrial Supply, Pincushion & Ironwood Medical Centre, Skaapsteker District Municipality, Korhaanfontein Metropolitan Municipality, Wolksloof Managing Agents, Grysbok Freight Forwarding, Suurvy Citrus & Wine, Boekenhout Advisory and Kuifkoppie Insurance Brokers. Each one has personas, knowledge documents, 24 months of financials and connector fixtures. Use them to try templates and vertical agents. They are dev only.
+
+Slugs, verticals, fixtures and matching agents: [Demo companies](https://github.com/aifluxx/aifluxx-developer/blob/main/docs/developer/demo-companies.md) in the developer docs.
 
 ## Develop
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Docs
+
+- README: new Components overview (CLI, client, validator, templates, mail, Starter UI, A2UI components, companion, MCP, source), Templates, Signals (planned), Tracing with Langfuse (planned) and Demo companies (dev sandbox) sections. The demo companies section links the developer docs page that lists the 11 fictitious South African demo companies.
+
 ## 1.3.1 - 2026-10-31
 
 ### Added
