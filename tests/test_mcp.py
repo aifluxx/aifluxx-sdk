@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,16 @@ V11 = {
     "portfolios_hide",
 }
 
-runner = CliRunner()
+# GitHub Actions forces a colour terminal. Rich then styles hyphens, so a
+# literal "--http" can be split by ANSI and a narrow wrap.
+_HELP_ENV = {
+    "NO_COLOR": "1",
+    "TERM": "dumb",
+    "COLUMNS": "160",
+    "LINES": "40",
+}
+runner = CliRunner(env=_HELP_ENV)
+_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _agents() -> dict[str, Any]:
@@ -540,7 +550,10 @@ def test_init_writes_cursor_mcp_json(tmp_path: Path, monkeypatch):
 
 def test_mcp_help_lists_http_transport():
     result = runner.invoke(app, ["mcp", "--help"])
-    text = result.output
+    text = _ANSI.sub("", result.output)
+    for mark in ("│", "╭", "╮", "╰", "╯", "─"):
+        text = text.replace(mark, " ")
+    text = " ".join(text.split())
     assert result.exit_code == 0, text
     assert "--http" in text
     assert "stdio" in text.lower()
