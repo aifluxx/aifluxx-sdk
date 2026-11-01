@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.3 - 2026-11-01
+
+### Added
+
+- `agent_contract` is a contract between two agents for one call. `offer` names the caller, the callee, the skill, and the tokens. `accept` settles a call with no money amount, including a zero-token call, and leaves a priced call as `payment_required` until a payment mandate exists. The module does not charge a card and does not call the other agent.
+
 ## 1.3.2 - 2026-11-01
 
 ### Added

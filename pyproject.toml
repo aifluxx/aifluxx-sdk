@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifluxx-sdk"
-version = "1.3.2"
+version = "1.3.3"
 description = "Python client and aifluxx CLI for the AIFluxx developer API."
 readme = "README.md"
 license = "MIT"
