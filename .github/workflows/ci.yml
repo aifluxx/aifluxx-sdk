@@ -38,3 +38,51 @@ jobs:
         run: |
           pip install build
           python -m build
+
+  version:
+    name: sdk version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Require a new SDK version
+        run: python -m aifluxx_sdk.sdk_version
+
+  tag:
+    name: tag release
+    needs: [test, package, version]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Tag this version
+        run: |
+          version="$(python -m aifluxx_sdk.sdk_version)"
+          tag="v${version}"
+          if git rev-parse --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+            if [ "$(git rev-parse "${tag}")" = "$(git rev-parse HEAD)" ]; then
+              echo "${tag} already points at this commit"
+              exit 0
+            fi
+            echo "${tag} already points at a different commit" >&2
+            exit 1
+          fi
+          git tag "${tag}"
+          git push origin "refs/tags/${tag}"

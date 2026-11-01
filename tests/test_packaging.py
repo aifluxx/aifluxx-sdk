@@ -138,7 +138,7 @@ def test_editable_install_exposes_templates_and_starter_ui(tmp_path: Path):
             assert bundled.joinpath("starter_ui", "package.json").is_file()
             assert bundled.joinpath("starter_ui", ".env.example").read_text(encoding="utf-8")
             assert not (pkg / "_source_root").exists()
-            assert aifluxx_sdk.__version__ == "1.3.1"
+            assert aifluxx_sdk.__version__ == "1.3.2"
             print("editable-ok")
             """
         ),

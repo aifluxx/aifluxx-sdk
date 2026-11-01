@@ -154,6 +154,8 @@ Installs above use `@latest`. Each published `v*` release moves that tag to the 
 
 `latest` is the release you update to. Your API key in `~/.aifluxx/credentials` stays where it is. The update does not log you in again and does not write the key into the repo.
 
+Each commit of this repository raises the version in `pyproject.toml` and adds that version to `CHANGELOG.md`. CI checks the version against the parent commit. A commit on `main` is tagged `vX.Y.Z`. That tag publishes the package and moves `latest`, which is what the agent dev container installs.
+
 Installed with pip from `@latest` (the commands in [Install](#install) and [Set up the API and MCP](#set-up-the-api-and-mcp)):
 
 bash:

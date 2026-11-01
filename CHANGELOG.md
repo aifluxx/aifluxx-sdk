@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.3.2 - 2026-11-01
 
 ### Added
 
 - `aifluxx init` writes the dev container with the package: `Dockerfile`, `compose.yaml`, `devcontainer/submit.sh`, `.devcontainer/devcontainer.json`, and `.github/workflows/submit.yml`. A push to `main` logs in as the Home key on the dev API, then runs `aifluxx validate`, `aifluxx push`, and `aifluxx submit`. The slug is read from `spec.yaml`. The Action does not push an image to a registry. After approval, dev.aifluxx.co.za makes the container available.
+- Each commit raises the SDK version in `pyproject.toml` and names that version in this changelog. CI rejects a commit that keeps the parent version. A commit on `main` is tagged `vX.Y.Z`, which publishes the package and moves `latest`.
 
 ### Docs
 

@@ -92,7 +92,7 @@ def _assert_tree(dest: Path) -> None:
     assert not (dest / ".git").exists()
     pyproject = (dest / "pyproject.toml").read_text(encoding="utf-8")
     assert 'name = "aifluxx-sdk"' in pyproject
-    assert 'version = "1.3.1"' in pyproject
+    assert 'version = "1.3.2"' in pyproject
 
 
 def test_source_command_writes_the_tree(tmp_path: Path):
