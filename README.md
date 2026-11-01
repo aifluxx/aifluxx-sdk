@@ -33,7 +33,7 @@ pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[m
 
 Scaffold a package. Use the slug I give you, or ask me for one. Also write the Cursor MCP config.
 - With a virtual environment inside the package: `aifluxx init <project> --venv --cursor-mcp`
-  This writes spec.yaml, instructions.md, README.md, and samples.yaml, creates `<project>/.venv` with `python -m venv` using the Python that is running `aifluxx`, and writes `<project>/.cursor/mcp.json`. That `.venv` is local. Do not commit it. `aifluxx push` does not upload it. It is separate from the environment used to pip install aifluxx. The mcp.json file does not contain an API key. MCP uses the key I added with `aifluxx login`, or `AIFLUXX_API_KEY` in the environment Cursor uses to start the process.
+  This writes spec.yaml, instructions.md, README.md, samples.yaml, compose.yaml, Dockerfile, devcontainer/submit.sh, .devcontainer/devcontainer.json, and .github/workflows/submit.yml, creates `<project>/.venv` with `python -m venv` using the Python that is running `aifluxx`, and writes `<project>/.cursor/mcp.json`. That `.venv` is local. Do not commit it. `aifluxx push` does not upload it. It is separate from the environment used to pip install aifluxx. The mcp.json file does not contain an API key. MCP uses the key I added with `aifluxx login`, or `AIFLUXX_API_KEY` in the environment Cursor uses to start the process.
 - Without one: `aifluxx init <project> --no-venv --cursor-mcp`
   This writes the same package files and `<project>/.cursor/mcp.json`, and no `.venv` is created. Plain `aifluxx init <project>` still scaffolds without a `.venv` and without mcp.json. Pass `--cursor-mcp` when I want MCP.
 
@@ -246,6 +246,7 @@ What the SDK contains. Everything below exists in this repo unless it is marked 
 | Credentials | `credentials.py` | API URL and key resolution: `AIFLUXX_API_URL`, `AIFLUXX_API_KEY`, `AIFLUXX_CREDENTIALS`, then the file saved by `aifluxx login`. |
 | Package validator | `package.py`, `catalog.py`, `lockfile.py` | Offline manifest checks with the same codes as the host, tool allow-lists (the host `GET /api/dev/tools` wins when you are logged in), and the per-package lock. |
 | Templates | `templates.py` | Starter packages for `aifluxx init --template`. See [Templates](#templates). |
+| End to end | `end_to_end.py` | Dev container, Compose, and the GitHub Action that `aifluxx init` writes. See [From a commit to the dev site](#from-a-commit-to-the-dev-site). |
 | Mail | `mail.py` | Connected-mailbox send, with the same rules as the in-app agent tool. Example: `examples/send_mail.py`. |
 | Starter UI | `src/aifluxx_sdk/starter_ui/` | Local React app (screens: Run console, Tools, Status, Settings) behind a local proxy that keeps the key server-side. Layout file: `layout.py`. See [Starter UI](#starter-ui). |
 | A2UI components | Developer portal A2UI SDK (`aifluxx-a2ui-sdk` registry, 104 entries) | UI building blocks the companion's `build` mode and the Starter UI use. Examples: DataTable, ChatPanel, Bar/Line/Area charts, Stat/KPI, Timeline, ApprovalGate, AgentRunStatus, ToolCallTrace, StreamingOutput, UsageMeter (tokens/cost ZAR), API key management, Permissions matrix, Citations/Sources and Tree view. A graph view component is **planned**. |
@@ -425,7 +426,7 @@ aifluxx run my-agent "Summarise open compliance tasks"
 aifluxx submit
 ```
 
-`init` scaffolds `spec.yaml`, `instructions.md`, a short README, and `samples.yaml`. `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. `aifluxx init SLUG --cursor-mcp` also writes `SLUG/.cursor/mcp.json` for the local MCP server. That file does not contain an API key. `--list` does not write it. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
+`init` scaffolds `spec.yaml`, `instructions.md`, a short README, `samples.yaml`, and the dev container files in [From a commit to the dev site](#from-a-commit-to-the-dev-site). `aifluxx init SLUG --venv` also creates `SLUG/.venv` with `python -m venv`. `aifluxx init SLUG --no-venv` is the default and scaffolds the package only. `--list` does not write a package or a `.venv`. `aifluxx init SLUG --cursor-mcp` also writes `SLUG/.cursor/mcp.json` for the local MCP server. That file does not contain an API key. `--list` does not write it. Do not commit `.venv`. `validate` skips files inside it, and `push` leaves it out of the upload. In a terminal, `aifluxx init` with no slug prompts for one. Outside a terminal it prints a usage line. `aifluxx init --list` prints the starters and does not write a folder. The default starter is `compliance` in both `init --help` and `init --list`. Starter tools and aliases match `GET /api/dev/templates`. `compliance` declares `list_obligations`. `finance` declares `ask_assistant`. `qa-over-documents` declares `search_company_knowledge` and `ask_assistant`. `standup` and `account-snapshot` declare their list tools and `search_company_knowledge`, and do not add `get_document`. Old ids are aliases: `compliance-checklist`, `finance-summariser`, and `qa-documents`. The ask tool id follows the API host: AIFluxx hosts, and a machine that is not logged in, use `ask_assistant`. `search_documents` is a former name: `validate` rejects it and tells you to use `search_company_knowledge`. New packages use schema `aifluxx/agent/v1`. `pricing.currency` is the logged-in org's currency when `GET /api/dev/me` includes one. A ZA-region org with no currency gets `ZAR`. With no org currency and no ZA region, including when you are not logged in, the scaffold uses `USD`.
 
 `validate` uses `GET /api/dev/tools` when you are logged in and that route exists. If you are not logged in, the route is missing, or the catalogue cannot be read, it uses the bundled allow-list. `push` checks the same host catalogue before it uploads, so a tool the host does not publish fails locally instead of as a `422 unknown_tool`. `push` uploads the folder and creates a Draft. It does not `git push`. Both commands leave out `.aifluxx/`, `.venv/`, the legacy metadata directory, a top-level `sdk/` directory, `*.egg-info`, and paths listed in `.aifluxxignore`.
 
@@ -468,6 +469,24 @@ aifluxx source
 ```
 
 After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The lock stores the slug and the semver from `spec.yaml`. `version_id` is filled from the push response: an explicit `version_id`, the id on the nested version object, or the response `id` when `version` is the semver that was just uploaded (that object also includes the package slug). It stays `null` when the response has no version UUID. `submit` and `run` use that UUID when it is present, and otherwise look the slug up with `GET /api/dev/agents`. The lock directory is not uploaded.
+
+## From a commit to the dev site
+
+`aifluxx init` writes these next to `spec.yaml`. The first commit of `aifluxx/aifluxx-agent-<slug>` includes them. The slug is the one in `spec.yaml`. The commands do not take a slug argument.
+
+| File | What it is |
+|---|---|
+| `Dockerfile` | Python 3.11 and the SDK from the `latest` tag. The container sleeps until a command is run. |
+| `compose.yaml` | The dev container. The Action builds it for the job. |
+| `devcontainer/submit.sh` | Logs in with the Home key, then runs `aifluxx validate`, `aifluxx push`, and `aifluxx submit`. |
+| `.devcontainer/devcontainer.json` | Opens that same Compose service. |
+| `.github/workflows/submit.yml` | On a push to `main`, runs the script inside the dev container. |
+
+The repository secret is `AIFLUXX_API_KEY`, the key from Home. The script logs in with `--platform dev`, so the API is `https://dev.aifluxx.co.za`. `push` creates a Draft. `submit` sends that draft for review. A platform owner approves it. `dev.aifluxx.co.za` then makes the container available.
+
+The Action's permission is `contents: read`. The Compose file does not name a registry. The workflow does not log into a registry and does not push an image. The dev container is built for the job and discarded.
+
+The next commit needs a new `version` in `spec.yaml`. A version that has already been approved cannot be submitted again.
 
 ## Starter UI
 

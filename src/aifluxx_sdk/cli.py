@@ -669,6 +669,9 @@ def init_cmd(
     (root / "instructions.md").write_text(chosen.instructions, encoding="utf-8")
     (root / "README.md").write_text(f"# {slug_to_name(folder)}\n\n{chosen.description}\n", encoding="utf-8")
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
+    from aifluxx_sdk.end_to_end import write_end_to_end
+
+    write_end_to_end(root)
     if venv:
         try:
             created = _create_venv(root)
@@ -682,7 +685,10 @@ def init_cmd(
         mcp_file.parent.mkdir(parents=True, exist_ok=True)
         mcp_file.write_text(cursor_mcp_document(), encoding="utf-8")
         typer.echo(f"Wrote {mcp_file}. It does not contain an API key.")
-    typer.echo(f"Created {root}. Commit this folder to your Git repo, then `aifluxx push` or Import from Git.")
+    typer.echo(
+        f"Created {root}. The first commit includes the GitHub Action. "
+        "A push to main validates, pushes a Draft, and submits it for review."
+    )
 
 
 @app.command()

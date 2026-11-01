@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `aifluxx init` writes the dev container with the package: `Dockerfile`, `compose.yaml`, `devcontainer/submit.sh`, `.devcontainer/devcontainer.json`, and `.github/workflows/submit.yml`. A push to `main` logs in as the Home key on the dev API, then runs `aifluxx validate`, `aifluxx push`, and `aifluxx submit`. The slug is read from `spec.yaml`. The Action does not push an image to a registry. After approval, dev.aifluxx.co.za makes the container available.
+
 ### Docs
 
 - README: new Components overview (CLI, client, validator, templates, mail, Starter UI, A2UI components, companion, MCP, source), Templates, Signals (planned), Tracing with Langfuse (planned) and Demo companies (dev sandbox) sections. The demo companies section links the developer docs page that lists the 11 fictitious South African demo companies.
