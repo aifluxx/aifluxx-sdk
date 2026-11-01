@@ -17,21 +17,29 @@ Optionally create and activate a virtual environment, then install into it. Skip
 - bash: `python -m venv .venv` then `source .venv/bin/activate`
 - Windows PowerShell: `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
 
-Install aifluxx 1.3.1:
+Install the latest aifluxx SDK. The `latest` tag is the published release:
 
-pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.1
+pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
 
-Run `aifluxx login`. Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there.
+Ask me which API to use, then run `aifluxx login` so I can add my API key myself.
+- Production: `aifluxx login` (API root https://api.aifluxx.co.za)
+- Dev host: `aifluxx login --platform dev` (API root https://dev.aifluxx.co.za)
+- My own API root: ask me for the https URL, then `aifluxx login --url <that url>`
+Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there. Do not invent a URL. Do not write the key into mcp.json, .env, or the repo.
 
-Scaffold a package. Use the slug I give you, or ask me for one.
-- With a virtual environment inside the package: `aifluxx init <project> --venv`
-  This writes spec.yaml, instructions.md, README.md, and samples.yaml, and creates `<project>/.venv` with `python -m venv` using the Python that is running `aifluxx`. That directory is local. Do not commit it. `aifluxx push` does not upload it. It is separate from the environment used to pip install aifluxx.
-- Without one: `aifluxx init <project> --no-venv`
-  This is the default. Plain `aifluxx init <project>` does the same. The same files are written, and no `.venv` is created.
+Install the MCP extra in the same environment:
+
+pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+
+Scaffold a package. Use the slug I give you, or ask me for one. Also write the Cursor MCP config.
+- With a virtual environment inside the package: `aifluxx init <project> --venv --cursor-mcp`
+  This writes spec.yaml, instructions.md, README.md, and samples.yaml, creates `<project>/.venv` with `python -m venv` using the Python that is running `aifluxx`, and writes `<project>/.cursor/mcp.json`. That `.venv` is local. Do not commit it. `aifluxx push` does not upload it. It is separate from the environment used to pip install aifluxx. The mcp.json file does not contain an API key. MCP uses the key I added with `aifluxx login`, or `AIFLUXX_API_KEY` in the environment Cursor uses to start the process.
+- Without one: `aifluxx init <project> --no-venv --cursor-mcp`
+  This writes the same package files and `<project>/.cursor/mcp.json`, and no `.venv` is created. Plain `aifluxx init <project>` still scaffolds without a `.venv` and without mcp.json. Pass `--cursor-mcp` when I want MCP.
 
 Then run `aifluxx validate <project>`. `aifluxx validate` with no path only works when the current directory contains spec.yaml, so change into `<project>` first if you omit the path.
 
-Report what you did: the Python version, whether you created and activated an install virtual environment, the pip command, whether login saved credentials, which init command you ran and whether `<project>/.venv` exists, and the validate result.
+Report what you did: the Python version, whether you created and activated an install virtual environment, the pip commands (SDK and MCP extra), which API root I chose, whether login saved credentials, which init command you ran, whether `<project>/.venv` exists, whether `<project>/.cursor/mcp.json` exists, and the validate result.
 ```
 
 ## Install
@@ -99,7 +107,7 @@ bash:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install git+https://github.com/aifluxx/aifluxx-sdk
+pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
 aifluxx source
 ```
 
@@ -108,7 +116,7 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install git+https://github.com/aifluxx/aifluxx-sdk
+pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
 aifluxx source
 ```
 
@@ -140,9 +148,92 @@ aifluxx-sdk/
 
 That tree is the installed version: package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. `setup.py` and `MANIFEST.in` are the packaging files that put this tree in the wheel. To work on the SDK itself and keep git history, use the clone and editable install above.
 
-To pin a release, append `@` and a tag once one is published (none yet), for example `pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.1`.
+Installs above use `@latest`. Each published `v*` release moves that tag to the release commit. `pip install git+https://github.com/aifluxx/aifluxx-sdk@latest` is the install to copy.
+
+## Update the SDK
+
+`latest` is the release you update to. Your API key in `~/.aifluxx/credentials` stays where it is. The update does not log you in again and does not write the key into the repo.
+
+Installed with pip from `@latest` (the commands in [Install](#install) and [Set up the API and MCP](#set-up-the-api-and-mcp)):
+
+bash:
+
+```bash
+pip install -U git+https://github.com/aifluxx/aifluxx-sdk@latest
+pip install -U "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+aifluxx --version
+```
+
+Windows PowerShell:
+
+```powershell
+pip install -U git+https://github.com/aifluxx/aifluxx-sdk@latest
+pip install -U "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+aifluxx --version
+```
+
+Skip the second pip line when you are not using MCP. `aifluxx --version` prints the version now installed. It should match the version on the [latest release](https://github.com/aifluxx/aifluxx-sdk/releases/latest).
+
+Editable clone. Fetch the `latest` tag, check it out, and reinstall:
+
+```bash
+git fetch origin tag latest --force
+git checkout latest
+pip install -e ".[mcp]"
+aifluxx --version
+```
+
+`git checkout latest` leaves you on that tag. To go back to working on the SDK itself, check out your branch and use `pip install -e ".[dev]"`. A clone of the default branch is not `@latest` until you fetch that tag.
+
+After an update, run `aifluxx validate` in your package again. If Cursor was already using MCP, reload the `aifluxx` server so it starts the updated `aifluxx mcp`.
 
 You need an approved developer account to get an API key. Sign up at https://developer.aifluxx.co.za/signup; accounts need approval before you can create a key.
+
+## Set up the API and MCP
+
+Do these in order. The blocks under [Log in](#log-in) and [MCP server](#mcp-server) are the full reference. This is the path a new developer follows.
+
+1. **Create the key on Home.** Sign up at https://developer.aifluxx.co.za/signup and wait until the account is approved. On Home, create a key. It is shown once and starts with `afx_dev_`. Copy it then. The CLI cannot create that first key before you are logged in. Later keys are `aifluxx keys create`. See [API keys](#api-keys).
+
+2. **Choose the API, then add your key.** `aifluxx login` asks `API key from Home` and hides what you type. You add the key. It is saved on this machine in `~/.aifluxx/credentials`. It is not written into the package, into `.env`, or into MCP config.
+
+   Production:
+
+   ```bash
+   aifluxx login
+   ```
+
+   Dev host:
+
+   ```bash
+   aifluxx login --platform dev
+   ```
+
+   Your own API root. Use the https URL of the AIFluxx API you want this machine to call:
+
+   ```bash
+   aifluxx login --url https://api.example.com
+   ```
+
+   Login calls `GET /api/dev/me` before it writes the file. Success prints `Saved` and the path. A rejected key or an unreachable host does not say `Saved`. To replace the key later, run `aifluxx login` again. `aifluxx keys create --save` or `aifluxx keys rotate <id> --save` replaces the saved key with a new one from the API.
+
+3. **Install MCP** in the same environment as the SDK:
+
+   ```bash
+   pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+   ```
+
+4. **Point Cursor at the local MCP server** when you scaffold. This writes `<project>/.cursor/mcp.json` and does not put the API key in it:
+
+   ```bash
+   aifluxx init my-agent --template compliance --cursor-mcp
+   ```
+
+   The server reads the key you added in step 2. If Cursor starts MCP without that login, set `AIFLUXX_API_KEY` in the environment Cursor uses to launch the process. Set `AIFLUXX_API_URL` the same way when that process should call a different API root than the saved login.
+
+5. **Check it.** `aifluxx validate my-agent` uses `GET /api/dev/tools` on the API you logged into. In Cursor, enable the `aifluxx` MCP server. It should list tools such as `projects_list` and `connectors_list_catalog`. A 401 means the key was not added: run `aifluxx login` again in a terminal on this machine.
+
+Hosted MCP is separate. After login, `AifluxxClient.mcp_url` is the API root plus `/mcp/`. Production is `https://api.aifluxx.co.za/mcp/`. The server from step 4 runs on your machine and calls the developer API with the key you added.
 
 ## Components
 
@@ -178,6 +269,98 @@ aifluxx init my-agent --template finance # scaffold from a template
 | `account-snapshot` | Builds a one-page account brief from CRM notes and vault files. |
 
 Then `aifluxx validate`, `aifluxx push`, `aifluxx submit`. Tool ids match `GET /api/dev/templates` on the host.
+
+## Built-in agent tools
+
+`spec.yaml` `tools` is the allow-list from `GET /api/dev/tools`. When you are logged in, that route is the list `validate` and `push` use. When you are not logged in, the route is missing, or the catalogue cannot be read, `validate` uses the bundled allow-list in `catalog.py`. Search tools are dropped at runtime when `knowledge` is omitted or both `connectors` and `folders` are empty. Write tools stay behind an approval step.
+
+### Host catalogue (`GET /api/dev/tools`)
+
+An AIFluxx host lists `ask_assistant`. `ask_aifluxx` is an alias of `ask_assistant`. `search_documents` is an alias of `search_company_knowledge`. The stored spec keeps the name you wrote.
+
+| Tool | Kind | What it returns |
+|---|---|---|
+| `ask_assistant` | read | Ask within this company under the signed-in user's access. |
+| `ask_aifluxx` | read | Alias of `ask_assistant`. |
+| `search_company_knowledge` | read | Search documents the user can already open. |
+| `search_documents` | read | Alias of `search_company_knowledge`. |
+| `list_documents` | read | List documents in the declared knowledge scope. |
+| `get_document` | read | Fetch one document the user can see. Pass `document_id` or `id`. |
+| `list_tasks` | read | List tasks for this company. |
+| `list_mandate_tasks` | read | Tasks on the mandate for this company. |
+| `list_contacts` | read | List people linked to this company. An optional `query` matches the name. |
+| `list_obligations` | read | List obligations for this company. |
+| `list_compliance_obligations` | read | List compliance obligations for this company. The bundled offline copy does not include this id. A host that does not publish it returns `422 unknown_tool`. |
+| `get_compliance_status` | read | Current compliance posture for this company. Same offline rule as `list_compliance_obligations`. |
+| `list_businesses` | read | The company this run is bound to. |
+| `create_task` | write | Create a task. Requires approval. |
+| `add_note` | write | Add a note. Requires approval. |
+| `send_message` | write | Send a message. Requires approval. |
+
+Document hits use the connector projection: `id`, `title`, `uri`, `source`. Declared `knowledge.connectors` and `knowledge.folders` narrow those hits. They do not add a source the platform does not publish.
+
+### Bundled allow-list (offline)
+
+Used when `GET /api/dev/tools` cannot be read.
+
+Read: `search_company_knowledge`, `get_document`, `list_obligations`, `ask_assistant`, `list_mandate_tasks`, `list_contacts`, `list_businesses`.
+
+Write: `send`, `send_mail`, `mail_send`, `create_task`, `update_task`, `add_note`, `create_document`, `write_document`.
+
+Alias: `search_documents` is reported as `search_company_knowledge`.
+
+`client.mail.send` is the connected-mailbox send in the library. It follows the same rules as the in-app send. It is separate from the `spec.yaml` names above. See [Python](#python).
+
+## Connector data
+
+`knowledge.connectors` names sources the platform already syncs. `tools` is the allow-list above. A tool id belongs in `tools`. A connector slug belongs in `knowledge.connectors`.
+
+`connectors_blueprint` pins the platform schema for each connector the agent uses. The platform owns that schema. A package cannot invent entities or provider tools. Read it with `connectors_read_schema` (`GET /api/dev/connectors`). Published OpenAPI 1.0.0 does not list that path yet. The dev developer host serves it.
+
+Schema version `1.0.0`. Access is `read`. Every entity has the same fields.
+
+| Field | Type |
+|---|---|
+| `id` | string |
+| `title` | string |
+| `uri` | string |
+| `source` | string |
+
+| Slug | Source | Entity |
+|---|---|---|
+| `gmail_mail` | Gmail | `message` |
+| `sharepoint` | SharePoint | `document` |
+| `google_drive` | Google Drive | `document` |
+| `onedrive` | OneDrive | `document` |
+| `slack` | Slack | `message` |
+
+The offline connector set also accepts `imap_mail` and `ms_graph_mail`. Together with `gmail_mail`, those are the mailbox identities `from_` may name on send. See [Python](#python). They are not extra document entities.
+
+Demo connector fixtures, when the dev sandbox has them on, project into that same shape. Nothing in the fixtures calls Gmail, Slack, Google, or Microsoft. A Gmail row is a message (`id`, `title`, `uri`, `source`, plus body text). A Slack row is a message on a channel. A SharePoint, Drive, or OneDrive row is a document whose body is markdown or a reference to a knowledge note. Search returns `id`, `title`, `uri`, and `source` only.
+
+```yaml
+schema: aifluxx/agent/v1
+knowledge:
+  connectors:
+    - gmail_mail
+    - sharepoint
+    - google_drive
+  folders: []
+connectors_blueprint:
+  - connector: gmail_mail
+    schema_version: "1.0.0"
+    access: read
+    entities:
+      - name: message
+        access: read
+        fields:
+          - {name: id, type: string}
+          - {name: title, type: string}
+          - {name: uri, type: string}
+          - {name: source, type: string}
+```
+
+Omit `knowledge` when the agent must not read company documents. An empty `connectors` list and an empty `folders` list also mean no document access. At hire, a company admin sees the connector names under "This agent expects". A missing source is absent at runtime. Hire still proceeds.
 
 ## Log in
 
@@ -386,7 +569,7 @@ Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_â€
 
 ## MCP server
 
-`pip install 'aifluxx-sdk[mcp]'` adds a local MCP server built with FastMCP from the official Python `mcp` SDK (`mcp>=1.20,<2`). The extra is optional. The rest of the SDK installs and runs without it.
+`pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"` adds a local MCP server built with FastMCP from the official Python `mcp` SDK (`mcp>=1.20,<2`). The extra is optional. The rest of the SDK installs and runs without it.
 
 Stdio is the default. `aifluxx mcp` and `aifluxx-mcp` start the same server. `aifluxx mcp --http` (or `aifluxx-mcp --http`) serves streamable HTTP on `http://127.0.0.1:8000/mcp`. `--host` and `--port` change that bind address.
 
@@ -501,6 +684,24 @@ The dev sandbox has 11 **fictitious** South African demo companies: Biltong & Bo
 
 Slugs, verticals, fixtures and matching agents: [Demo companies](https://github.com/aifluxx/aifluxx-developer/blob/main/docs/developer/demo-companies.md) in the developer docs.
 
+### Seven vertical pilots
+
+These seven are fictitious South African pilot companies, each a different vertical. They sit in the same dev sandbox as the companies named above. Each one has 15 personas, 17 knowledge notes (markdown and PDF), 24 months of profit and loss, balance sheet and cash flow, a catalogue, and connector fixtures for Gmail, Slack, SharePoint, Google Drive and OneDrive. Connector rows use the platform fields `id`, `title`, `uri` and `source`. They are dev only.
+
+| Company | Org slug | Vertical | Catalogue | Matching agent |
+|---|---|---|---|---|
+| Skaapsteker District Municipality | `skaapsteker-dm` | District municipality (public sector). 890 staff in the fixture. Four fictitious local municipalities. | Local municipalities, grants, indigent household counts | [`agents/local-government`](https://github.com/aifluxx/aifluxx-developer/tree/main/agents/local-government) |
+| Korhaanfontein Metropolitan Municipality | `korhaanfontein-metro` | Metropolitan municipality (public sector). 12 500 staff in the fixture. | Regions, grants, indigent household counts | [`agents/local-government`](https://github.com/aifluxx/aifluxx-developer/tree/main/agents/local-government) |
+| Wolksloof Managing Agents (Pty) Ltd | `wolksloof-mews` | Property management and body corporate. 86 staff in the fixture. Sectional-title schemes and one home owners association. | Schemes, levy roll, contractors | [`agents/property-management`](https://github.com/aifluxx/aifluxx-developer/tree/main/agents/property-management) |
+| Grysbok Freight Forwarding (Pty) Ltd | `grysbok-freight` | Logistics and freight forwarding. 240 staff in the fixture. | Lanes, shippers, principals | [`agents/logistics`](https://github.com/aifluxx/aifluxx-developer/tree/main/agents/logistics) |
+| Suurvy Citrus & Wine (Pty) Ltd | `suurvy-citrus` | Citrus and wine agri-processing. 640 staff in the fixture. | Blocks, cultivars, offtakers | Fixture only. No dedicated agent package yet. |
+| Boekenhout Advisory Inc. | `boekenhout-advisory` | Accounting and legal professional services. 74 staff in the fixture. | Clients, matters, engagements | [`agents/tax-compliance`](https://github.com/aifluxx/aifluxx-developer/tree/main/agents/tax-compliance) |
+| Kuifkoppie Insurance Brokers (Pty) Ltd | `kuifkoppie-brokers` | Insurance broker. 58 staff in the fixture. | Insurers, policies, claims | Fixture only. No dedicated agent package yet. |
+
+Login mailboxes are `demo@<org-slug>.example`. Passwords are not in this repository. An operator reads them from Key Vault at seed time. The seed refuses to run unless the environment is dev.
+
+`agents/payroll-hr` can run against any demo company, because each one has 15 personas. Karoo Kraal Industrial Supply is the reference set. `agents/healthcare-admin` pairs with Pincushion & Ironwood Medical Centre. Retail, mining and industrial supply remain Biltong & Bougainvillea, Vaalkop Mining and Karoo Kraal Industrial Supply.
+
 ## Develop
 
 ```bash
@@ -512,4 +713,4 @@ twine check dist/*
 
 Requires Python 3.11 or newer.
 
-Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI.
+Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI. After a `v*` upload, the same workflow moves the git tag `latest` to that commit. It does not move any branch. Docs and `pip install git+https://github.com/aifluxx/aifluxx-sdk@latest` follow that tag.

@@ -555,7 +555,7 @@ def test_version_flag_prints_sdk_version():
 
 def test_readme_install_dev_login_and_brand():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
+    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@latest\n" in readme
     assert "aifluxx-sdk @ git+" not in readme
     assert "aifluxx login --platform dev" in readme
     assert "dev.aifluxx.co.za/mcp/" in readme
@@ -920,7 +920,7 @@ def test_readme_install_with_cursor_prompt():
     assert "3.11" in section
     assert "source .venv/bin/activate" in section
     assert "Activate.ps1" in section
-    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@v1.3.1" in section
+    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@latest" in section
     assert "aifluxx login" in section
     assert "Never echo the key" in section
     assert "aifluxx init <project> --venv" in section

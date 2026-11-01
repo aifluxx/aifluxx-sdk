@@ -625,6 +625,14 @@ Schema id: `aifluxx/agent/v1`.
 
 `connectors_blueprint` pins `schema_version`, `access`, and `entities` with `fields`.
 Read it with the `connectors_read_schema` tool. Do not declare provider tools there.
+
+Host tool ids from `GET /api/dev/tools`. AIFluxx lists `ask_assistant`. `ask_aifluxx` is an alias of `ask_assistant`.
+
+Read: `ask_assistant`, `ask_aifluxx` (alias of `ask_assistant`), `search_company_knowledge`, `search_documents` (alias), `list_documents`, `get_document`, `list_tasks`, `list_mandate_tasks`, `list_contacts`, `list_obligations`, `list_compliance_obligations`, `get_compliance_status`, `list_businesses`.
+
+Write, approval required: `create_task`, `add_note`, `send_message`.
+
+The bundled offline allow-list, used when that route cannot be read, is smaller. Read: `search_company_knowledge`, `get_document`, `list_obligations`, `ask_assistant`, `list_mandate_tasks`, `list_contacts`, `list_businesses`. Write: `send`, `send_mail`, `mail_send`, `create_task`, `update_task`, `add_note`, `create_document`, `write_document`. `search_documents` maps to `search_company_knowledge`. `list_compliance_obligations` and `get_compliance_status` are host-catalogue ids and are absent from the offline copy.
 """
 
 _CONNECTOR_SCHEMA_DOC = """# Platform connector schema
@@ -639,6 +647,20 @@ Agents receive connector data through the platform schema.
 - POST /api/dev/connections/discover accepts secrets and is not an MCP tool.
 
 Published OpenAPI 1.0.0 does not list GET /api/dev/connectors. The dev developer host serves it.
+
+Schema version `1.0.0`. Access is `read`. Every entity has string fields `id`, `title`, `uri`, `source`.
+
+| Slug | Source | Entity |
+|---|---|---|
+| `gmail_mail` | Gmail | `message` |
+| `sharepoint` | SharePoint | `document` |
+| `google_drive` | Google Drive | `document` |
+| `onedrive` | OneDrive | `document` |
+| `slack` | Slack | `message` |
+
+`imap_mail` and `ms_graph_mail` are mailbox identities for send, with `gmail_mail`. They are not extra document entities.
+
+Dev sandbox demo companies project connector fixtures into this shape. Search returns `id`, `title`, `uri`, and `source`. The seven vertical pilots are `skaapsteker-dm` (district municipality), `korhaanfontein-metro` (metropolitan municipality), `wolksloof-mews` (property management), `grysbok-freight` (logistics), `suurvy-citrus` (citrus and wine), `boekenhout-advisory` (accounting and legal), and `kuifkoppie-brokers` (insurance broker). Each has personas, knowledge notes, 24 months of financials, a catalogue, and fixtures for the five connectors above. They are fictitious and dev only.
 """
 
 

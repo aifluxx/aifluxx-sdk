@@ -194,7 +194,7 @@ def test_readme_documents_both_installs():
     assert "pip install -e .\\aifluxx-sdk\n" in readme
     assert "source .venv/bin/activate\n" in readme
     assert "Activate.ps1" in readme
-    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk\n" in readme
+    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@latest\n" in readme
     assert "aifluxx source\n" in readme
     assert "aifluxx source my-sdk" in readme
     assert "--force" in readme

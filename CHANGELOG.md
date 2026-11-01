@@ -5,6 +5,9 @@
 ### Docs
 
 - README: new Components overview (CLI, client, validator, templates, mail, Starter UI, A2UI components, companion, MCP, source), Templates, Signals (planned), Tracing with Langfuse (planned) and Demo companies (dev sandbox) sections. The demo companies section links the developer docs page that lists the 11 fictitious South African demo companies.
+- README: Built-in agent tools (host `GET /api/dev/tools` catalogue and the bundled offline allow-list) and Connector data (platform schema `1.0.0`, the five knowledge connectors, and the demo fixture projection). The demo companies section also lists the seven vertical pilot companies, with org slug, vertical, catalogue and matching agent.
+- README: Set up the API and MCP walks through creating a Home key, choosing the API root (production, dev, or the developer's own URL), adding that key with `aifluxx login`, installing the MCP extra, and writing Cursor MCP config. The Install with Cursor prompt follows the same path. The key is added by the developer at the login prompt and is not written into the repo or into `mcp.json`.
+- Install docs use `git+https://github.com/aifluxx/aifluxx-sdk@latest`. Publishing a `v*` release uploads to PyPI and then moves the git tag `latest` to that commit. README section Update the SDK covers pip `-U` and an editable checkout of that tag.
 
 ## 1.3.1 - 2026-10-31
 

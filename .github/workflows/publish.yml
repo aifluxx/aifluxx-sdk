@@ -1,6 +1,8 @@
 # Publish to PyPI with trusted publishing (OIDC). No API token.
 # Does not run on branch pushes or pull requests.
 # A tag matching v* publishes. Do not create a v* tag to test this workflow.
+# After that upload, the job "tag latest" moves the git tag latest to the
+# same commit. pip install ...@latest follows that tag. Branches are not moved.
 #
 # Before the first run, add this workflow as a PyPI trusted publisher:
 #   owner: aifluxx
@@ -61,3 +63,21 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+  latest:
+    name: tag latest
+    needs: pypi
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Point the latest tag at this release
+        run: |
+          git tag -f latest "${{ github.sha }}"
+          git push origin refs/tags/latest --force
