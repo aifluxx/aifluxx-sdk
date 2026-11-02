@@ -15,9 +15,10 @@ def test_default_templates_use_the_bundled_allow_list():
         assert set(template.tools) <= READ_TOOLS
 
 
-def test_compliance_checklist_alias_is_the_default_template():
-    assert get_template("compliance-checklist") is get_template(DEFAULT_TEMPLATE)
-    assert DEFAULT_TEMPLATE == "compliance"
+def test_blank_is_the_default_and_compliance_keeps_its_alias():
+    assert get_template("compliance-checklist") is get_template("compliance")
+    assert DEFAULT_TEMPLATE == "blank"
+    assert get_template("blank").tools == ()
 
 
 def test_parse_tool_catalogue_shapes():

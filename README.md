@@ -19,17 +19,18 @@ Optionally create and activate a virtual environment, then install into it. Skip
 
 Install the latest aifluxx SDK. The `latest` tag is the published release:
 
-pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
+pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 
 Ask me which API to use, then run `aifluxx login` so I can add my API key myself.
 - Production: `aifluxx login` (API root https://api.aifluxx.co.za)
-- Dev host: `aifluxx login --platform dev` (API root https://dev.aifluxx.co.za)
+- Dev host: `aifluxx login --platform dev` (API root https://dev.aifluxx.co.za). This host accepts a key and does not accept developer push.
+- Developer portal: `aifluxx login --platform developer` (API root https://dev.developer.aifluxx.co.za). Use this for `aifluxx push` and `aifluxx run`.
 - My own API root: ask me for the https URL, then `aifluxx login --url <that url>`
 Tell me to paste the API key from Home myself. Never echo the key, never pass it with `--api-key`, and never write it into the repo. In a terminal, `aifluxx login` prompts `API key from Home` and hides the input. If this shell is not a terminal, the command exits without saving a key. Ask me to run `aifluxx login` in Cursor's terminal and paste the key there. Do not invent a URL. Do not write the key into mcp.json, .env, or the repo.
 
 Install the MCP extra in the same environment:
 
-pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+pip install "aifluxx-sdk[mcp] @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 
 Scaffold a package. Use the slug I give you, or ask me for one. Also write the Cursor MCP config.
 - With a virtual environment inside the package: `aifluxx init <project> --venv --cursor-mcp`
@@ -107,7 +108,7 @@ bash:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
+pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 aifluxx source
 ```
 
@@ -116,7 +117,7 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install git+https://github.com/aifluxx/aifluxx-sdk@latest
+pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 aifluxx source
 ```
 
@@ -148,7 +149,7 @@ aifluxx-sdk/
 
 That tree is the installed version: package code, templates, starter UI, README, pyproject.toml, LICENSE, and examples. `setup.py` and `MANIFEST.in` are the packaging files that put this tree in the wheel. To work on the SDK itself and keep git history, use the clone and editable install above.
 
-Installs above use `@latest`. Each published `v*` release moves that tag to the release commit. `pip install git+https://github.com/aifluxx/aifluxx-sdk@latest` is the install to copy.
+The install command checks out the default branch. There is no Git ref named `latest` for a new developer to install.
 
 ## Update the SDK
 
@@ -161,16 +162,16 @@ Installed with pip from `@latest` (the commands in [Install](#install) and [Set 
 bash:
 
 ```bash
-pip install -U git+https://github.com/aifluxx/aifluxx-sdk@latest
-pip install -U "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+pip install -U "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
+pip install -U "aifluxx-sdk[mcp] @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 aifluxx --version
 ```
 
 Windows PowerShell:
 
 ```powershell
-pip install -U git+https://github.com/aifluxx/aifluxx-sdk@latest
-pip install -U "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+pip install -U "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"
+pip install -U "aifluxx-sdk[mcp] @ git+https://github.com/aifluxx/aifluxx-sdk.git"
 aifluxx --version
 ```
 
@@ -222,7 +223,7 @@ Do these in order. The blocks under [Log in](#log-in) and [MCP server](#mcp-serv
 3. **Install MCP** in the same environment as the SDK:
 
    ```bash
-   pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"
+   pip install "aifluxx-sdk[mcp] @ git+https://github.com/aifluxx/aifluxx-sdk.git"
    ```
 
 4. **Point Cursor at the local MCP server** when you scaffold. This writes `<project>/.cursor/mcp.json` and does not put the API key in it:
@@ -406,6 +407,7 @@ Named platforms:
 |---|---|
 | `aifluxx` | `https://api.aifluxx.co.za` |
 | `dev` | `https://dev.aifluxx.co.za` |
+| `developer` | `https://dev.developer.aifluxx.co.za` |
 
 `dev` is the dev API at `https://dev.aifluxx.co.za`. `aifluxx` is production. Any other host is a custom `--url`.
 
@@ -590,7 +592,7 @@ Authorization is `Authorization: Bearer` with a Connected-apps key (`afx_live_â€
 
 ## MCP server
 
-`pip install "git+https://github.com/aifluxx/aifluxx-sdk@latest#egg=aifluxx-sdk[mcp]"` adds a local MCP server built with FastMCP from the official Python `mcp` SDK (`mcp>=1.20,<2`). The extra is optional. The rest of the SDK installs and runs without it.
+`pip install "aifluxx-sdk[mcp] @ git+https://github.com/aifluxx/aifluxx-sdk.git"` adds a local MCP server built with FastMCP from the official Python `mcp` SDK (`mcp>=1.20,<2`). The extra is optional. The rest of the SDK installs and runs without it.
 
 Stdio is the default. `aifluxx mcp` and `aifluxx-mcp` start the same server. `aifluxx mcp --http` (or `aifluxx-mcp --http`) serves streamable HTTP on `http://127.0.0.1:8000/mcp`. `--host` and `--port` change that bind address.
 
@@ -734,4 +736,4 @@ twine check dist/*
 
 Requires Python 3.11 or newer.
 
-Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI. After a `v*` upload, the same workflow moves the git tag `latest` to that commit. It does not move any branch. Docs and `pip install git+https://github.com/aifluxx/aifluxx-sdk@latest` follow that tag.
+Do not push a `v*` tag to try a release. `.github/workflows/publish.yml` runs on `workflow_dispatch` and on tags `v*`, and that job uploads to PyPI. After a `v*` upload, the same workflow moves the git tag `latest` to that commit. It does not move any branch. Docs and `pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"` follow that tag.

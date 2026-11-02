@@ -12,6 +12,12 @@ from __future__ import annotations
 
 API_TEMPLATES: tuple[dict[str, object], ...] = (
     {
+        "id": "blank",
+        "aliases": (),
+        "tools": (),
+        "ask_on_truest_host": False,
+    },
+    {
         "id": "compliance",
         "aliases": ("compliance-checklist",),
         "tools": ("list_obligations",),

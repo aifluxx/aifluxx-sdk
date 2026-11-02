@@ -30,6 +30,15 @@ class Template:
 
 
 TEMPLATES: dict[str, Template] = {
+    "blank": Template(
+        slug="blank",
+        name="Blank agent",
+        category="general",
+        description="An empty agent. Add your own instructions and tools.",
+        tools=(),
+        knowledge=(),
+        instructions="Describe what this agent does for [[company_name]].\n",
+    ),
     "compliance": Template(
         slug="compliance-checklist",
         name="Compliance checklist",
@@ -94,8 +103,8 @@ TEMPLATES: dict[str, Template] = {
 }
 
 
-# Public starter id. `init --help` and `init --list` both use this string.
-DEFAULT_TEMPLATE = "compliance"
+# Public starter id. `init` with no --template uses this. It writes no tools.
+DEFAULT_TEMPLATE = "blank"
 
 # Old ids from GET /api/dev/templates. The public id stays the dict key above.
 TEMPLATE_ALIASES = {
@@ -182,7 +191,8 @@ def _spec_currency(currency: str | None) -> str:
 
 def render_spec(slug: str, template: Template, *, currency: str | None = None, api_url: str | None = None) -> str:
     """Render spec.yaml. ``currency`` is an ISO code; anything else stays USD."""
-    tools = "\n".join(f"  - {tool}" for tool in scaffold_tools(template, api_url))
+    chosen = scaffold_tools(template, api_url)
+    tools = "tools: []\n" if not chosen else "tools:\n" + "\n".join(f"  - {tool}" for tool in chosen) + "\n"
     knowledge = ""
     if template.knowledge:
         connectors = ", ".join(template.knowledge)
@@ -195,7 +205,7 @@ def render_spec(slug: str, template: Template, *, currency: str | None = None, a
         "version: 0.1.0\n"
         f"category: {template.category}\n"
         "trigger:\n  type: chat\n"
-        f"tools:\n{tools}\n"
+        f"{tools}"
         f"{knowledge}"
         f"pricing:\n  model: free\n  amount_minor: 0\n  currency: {_spec_currency(currency)}\n"
     )

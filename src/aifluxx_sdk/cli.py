@@ -632,6 +632,11 @@ def init_cmd(
         "--cursor-mcp",
         help="Also write .cursor/mcp.json for the local aifluxx MCP server. The file does not contain an API key.",
     ),
+    container: bool = typer.Option(
+        False,
+        "--container/--no-container",
+        help="Also write Docker and devcontainer files. Default --no-container.",
+    ),
     json_output: bool = _json_option(),
 ) -> None:
     """Scaffold a package in your repo. git push still goes to GitHub or GitLab."""
@@ -671,7 +676,7 @@ def init_cmd(
     (root / "samples.yaml").write_text("prompts:\n  - Summarise what you can already see.\n", encoding="utf-8")
     from aifluxx_sdk.end_to_end import write_end_to_end
 
-    write_end_to_end(root)
+    write_end_to_end(root, container=container)
     if venv:
         try:
             created = _create_venv(root)
@@ -686,8 +691,8 @@ def init_cmd(
         mcp_file.write_text(cursor_mcp_document(), encoding="utf-8")
         typer.echo(f"Wrote {mcp_file}. It does not contain an API key.")
     typer.echo(
-        f"Created {root}. The first commit includes the GitHub Action. "
-        "A push to main validates, pushes a Draft, and submits it for review."
+        f"Created {root}. The first commit includes a GitHub Action that validates and pushes a Draft. "
+        "It does not submit. Run aifluxx submit when the draft is ready."
     )
 
 

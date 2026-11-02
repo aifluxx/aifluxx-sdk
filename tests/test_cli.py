@@ -555,8 +555,7 @@ def test_version_flag_prints_sdk_version():
 
 def test_readme_install_dev_login_and_brand():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@latest\n" in readme
-    assert "aifluxx-sdk @ git+" not in readme
+    assert 'pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"\n' in readme
     assert "aifluxx login --platform dev" in readme
     assert "dev.aifluxx.co.za/mcp/" in readme
     assert "AIFLUXX_API_URL" in readme
@@ -714,7 +713,7 @@ def test_init_list_and_missing_slug(tmp_path: Path, monkeypatch):
     listed = runner.invoke(app, ["init", "--list"])
     text = _text(listed)
     assert listed.exit_code == 0, text
-    assert "compliance [default]" in text
+    assert "blank [default]" in text
     assert "finance" in text
     assert "search_company_knowledge" in text
     assert "tools: list_obligations" in text
@@ -732,8 +731,8 @@ def test_init_list_and_missing_slug(tmp_path: Path, monkeypatch):
     payload = json.loads(raw.output)
     assert {row["template"] for row in payload} >= {"compliance", "standup"}
     default = next(row for row in payload if row["default"])
-    assert default["template"] == "compliance"
-    assert default["aliases"] == ["compliance-checklist"]
+    assert default["template"] == "blank"
+    assert default["aliases"] == []
     missing = runner.invoke(app, ["init", "--template", "finance"])
     usage = _text(missing)
     assert missing.exit_code == 1
@@ -757,7 +756,7 @@ def test_init_prompts_for_slug(tmp_path: Path, monkeypatch):
 def test_validate_uses_host_catalogue(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing-credentials"))
-    created = runner.invoke(app, ["init", "my-agent"])
+    created = runner.invoke(app, ["init", "my-agent", "--template", "compliance"])
     assert created.exit_code == 0, created.output
     monkeypatch.setattr("aifluxx_sdk.cli._host_read_tools", lambda: frozenset({"get_document"}))
     result = runner.invoke(app, ["validate", str(tmp_path / "my-agent")])
@@ -818,7 +817,7 @@ def test_status_is_human_by_default_and_json_is_raw(tmp_path: Path, monkeypatch)
 def test_init_help_default_is_the_listed_template():
     help_text = _flat(_text(runner.invoke(app, ["init", "--help"])))
     listed = _text(runner.invoke(app, ["init", "--list"]))
-    assert "[default: compliance]" in help_text
+    assert "[default: blank]" in help_text
     assert "compliance-checklist is an alias for compliance" in help_text
     assert "finance-summariser is an alias for finance" in help_text
     assert "qa-documents is an alias for qa-over-documents" in help_text
@@ -920,11 +919,10 @@ def test_readme_install_with_cursor_prompt():
     assert "3.11" in section
     assert "source .venv/bin/activate" in section
     assert "Activate.ps1" in section
-    assert "pip install git+https://github.com/aifluxx/aifluxx-sdk@latest" in section
+    assert 'pip install "aifluxx-sdk @ git+https://github.com/aifluxx/aifluxx-sdk.git"' in section
     assert "aifluxx login" in section
     assert "Never echo the key" in section
     assert "aifluxx init <project> --venv" in section
     assert "aifluxx init <project> --no-venv" in section
     assert "aifluxx validate <project>" in section
     assert "Report what you did" in section
-    assert "aifluxx-sdk @ git+" not in section

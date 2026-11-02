@@ -9,12 +9,15 @@ from pathlib import Path
 from aifluxx_sdk.exceptions import AuthError
 
 DEFAULT_URL = "https://api.aifluxx.co.za"
-# Dev API. The developer portal host is not an API base.
+# Subscriber dev API. Push and run for the developer program use DEVELOPER_URL.
 DEV_URL = "https://dev.aifluxx.co.za"
+# Developer portal. That host proxies /api to the developer API.
+DEVELOPER_URL = "https://dev.developer.aifluxx.co.za"
 
 PLATFORMS = {
     "aifluxx": DEFAULT_URL,
     "dev": DEV_URL,
+    "developer": DEVELOPER_URL,
 }
 
 _CONFIG_DIR = ".aifluxx"
