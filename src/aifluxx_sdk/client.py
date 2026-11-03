@@ -103,7 +103,7 @@ class CompanionClient:
             return
         detail, body = _error_body(res)
         if res.status_code == 401:
-            raise AuthError("Not logged in, or this key was rejected. Run `aifluxx login`.")
+            raise AuthError("This key is invalid or revoked. Run `aifluxx login` and paste a current key from Home.")
         if res.status_code == 429:
             raise AifluxxError(_limit_message(detail, body))
         if res.status_code == 503 or body.get("servable") is False:

@@ -89,13 +89,34 @@ class Credentials:
     api_key: str
 
 
+def signup_page(api_url: str) -> str:
+    """Sign-up page for an API root. Dev hosts stay on the dev portal."""
+    base = normalize_api_url(api_url)
+    if base in {DEV_URL, DEVELOPER_URL}:
+        return "https://dev.developer.aifluxx.co.za/signup"
+    return "https://developer.aifluxx.co.za/signup"
+
+
+def not_logged_in_message() -> str:
+    """Missing credentials. The sign-up link follows AIFLUXX_API_URL when it is set."""
+    chosen = os.environ.get("AIFLUXX_API_URL", "").strip()
+    if chosen:
+        return (
+            "Not logged in. Run `aifluxx login` and paste the afx_dev_ key from Home. "
+            f"Sign up at {signup_page(chosen)} (accounts need approval)."
+        )
+    return (
+        "Not logged in. Run `aifluxx login --platform dev` or `aifluxx login --platform aifluxx`, "
+        "then paste the afx_dev_ key from Home. "
+        "Sign up at https://dev.developer.aifluxx.co.za/signup for dev, "
+        "or https://developer.aifluxx.co.za/signup for production (accounts need approval)."
+    )
+
+
 def load_credentials(path: Path | None = None) -> Credentials:
     store = path or credentials_path()
     if not store.is_file():
-        raise AuthError(
-            "Not logged in. Run `aifluxx login` and paste the afx_dev_ key from Home. "
-            "Sign up at https://developer.aifluxx.co.za/signup (accounts need approval)."
-        )
+        raise AuthError(not_logged_in_message())
     try:
         data = json.loads(store.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:

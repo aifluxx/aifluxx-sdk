@@ -4,6 +4,12 @@ import { join } from "node:path";
 
 export const DEFAULT_API_ROOT = "https://api.aifluxx.co.za";
 
+const PLATFORM_ROOTS: Record<string, string> = {
+  aifluxx: "https://api.aifluxx.co.za",
+  dev: "https://dev.aifluxx.co.za",
+  developer: "https://dev.developer.aifluxx.co.za",
+};
+
 /** MCP endpoint for an API root. The trailing slash is required. */
 export function mcpUrlFor(apiRoot: string): string {
   return `${normalizeApiRoot(apiRoot)}/mcp/`;
@@ -68,9 +74,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     apiKey = String(creds.api_key).trim();
     keySource = "credentials";
   }
-  // Explicit env / .env.local URL, then the URL saved by `aifluxx login`, then production.
+  // Explicit URL, then AIFLUXX_PLATFORM, then the URL saved by `aifluxx login`, then production.
   const credUrl = creds?.url ? String(creds.url) : "";
-  const apiRoot = normalizeApiRoot(get("AIFLUXX_API_URL") || credUrl || DEFAULT_API_ROOT);
+  const platformName = (env.AIFLUXX_PLATFORM?.trim() || local.AIFLUXX_PLATFORM?.trim() || "").toLowerCase();
+  const platformRoot = PLATFORM_ROOTS[platformName] || "";
+  const apiRoot = normalizeApiRoot(get("AIFLUXX_API_URL") || platformRoot || credUrl || DEFAULT_API_ROOT);
   const mockFlag = ["1", "true", "yes"].includes(get("AIFLUXX_MOCK").toLowerCase());
   return { mock: mockFlag || !apiKey, apiRoot, apiKey, keySource };
 }

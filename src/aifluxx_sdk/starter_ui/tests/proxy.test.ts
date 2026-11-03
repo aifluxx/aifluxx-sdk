@@ -47,6 +47,8 @@ describe("config", () => {
     expect(fromEnvKey.apiRoot).toBe("https://dev.aifluxx.co.za");
     const overridden = loadConfig({ AIFLUXX_CREDENTIALS: creds, AIFLUXX_API_URL: "https://api.example/root/" } as NodeJS.ProcessEnv, "/nonexistent");
     expect(overridden.apiRoot).toBe("https://api.example/root");
+    const fromPlatform = loadConfig({ AIFLUXX_CREDENTIALS: "/nonexistent", AIFLUXX_PLATFORM: "dev" } as NodeJS.ProcessEnv, "/nonexistent");
+    expect(fromPlatform.apiRoot).toBe("https://dev.aifluxx.co.za");
     expect(mcpUrlFor(overridden.apiRoot)).toBe("https://api.example/root/mcp/");
   });
 });
