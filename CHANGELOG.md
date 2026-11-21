@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.4 - 2026-11-21
+
+### Added
+
+- `aifluxx partner-keys list`, `set`, and `delete` store a partner API key such as Nulink. The value is not printed.
+- `aifluxx submit` reads the version id from a push response of `{id, state}` when the host does not send the semver.
+
+### Docs
+
+- README: push and the dev-container login use the developer portal (`--platform developer`). `aifluxx partner-keys` is documented next to the Home key commands.
+
 ## 1.3.3 - 2026-11-01
 
 ### Added
