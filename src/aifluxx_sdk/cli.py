@@ -94,7 +94,9 @@ app = typer.Typer(
     help="Author an agent package and call the AIFluxx API. Signup stays on the developer site.",
 )
 keys_app = typer.Typer(no_args_is_help=True, help="List, create, rotate, or revoke developer API keys.")
+partner_keys_app = typer.Typer(no_args_is_help=True, help="Store a partner API key, such as Nulink. The value is not shown again.")
 app.add_typer(keys_app, name="keys")
+app.add_typer(partner_keys_app, name="partner-keys")
 
 
 def _json_option() -> Any:
@@ -1049,6 +1051,71 @@ def keys_revoke(
         typer.echo(f"Revoked {payload.get('id') or key_id}.")
         return
     _emit(payload, as_json=False)
+
+
+def _partner_secret(value: str | None) -> str:
+    if value is not None and value.strip():
+        return value
+    if not _interactive():
+        secret = sys.stdin.read().strip()
+        if secret:
+            return secret
+    secret = typer.prompt("Partner key", hide_input=True)
+    if not str(secret).strip():
+        raise AifluxxError("Enter the partner key.")
+    return str(secret)
+
+
+@partner_keys_app.command("list")
+def partner_keys_list(
+    ctx: typer.Context,
+    json_output: bool = _json_option(),
+) -> None:
+    """List stored partner key names. Values are not returned."""
+    try:
+        with _client() as client:
+            payload = client.dev.list_partner_keys()
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    _emit(payload, as_json=_as_json(ctx, json_output))
+
+
+@partner_keys_app.command("set")
+def partner_keys_set(
+    name: str = typer.Argument(..., help="Short name, such as nulink."),
+    value: str | None = typer.Option(
+        None,
+        "--value",
+        help="The partner key. Omit it to be prompted, or pipe it on stdin.",
+    ),
+) -> None:
+    """Store one partner key for this organisation. The value is not printed."""
+    try:
+        secret = _partner_secret(value)
+        with _client() as client:
+            payload = client.dev.set_partner_key(name, secret)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    stored = name.strip().lower()
+    if isinstance(payload, dict) and payload.get("name"):
+        stored = str(payload["name"])
+    typer.echo(f"Stored {stored}. It is not shown again.")
+
+
+@partner_keys_app.command("delete")
+def partner_keys_delete(
+    name: str = typer.Argument(..., help="Name from `aifluxx partner-keys list`."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Delete without a confirmation prompt."),
+) -> None:
+    """Delete one stored partner key."""
+    if not yes and not typer.confirm(f"Delete partner key {name}?"):
+        raise typer.Exit(code=1)
+    try:
+        with _client() as client:
+            client.dev.delete_partner_key(name)
+    except (AifluxxError, OSError, httpx.HTTPError, httpx.StreamError) as exc:
+        _die(exc)
+    typer.echo(f"Deleted {name.strip().lower()}.")
 
 
 class CompanionGroup(typer.core.TyperGroup):

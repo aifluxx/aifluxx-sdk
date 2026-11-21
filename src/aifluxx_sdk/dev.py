@@ -342,6 +342,31 @@ class DevClient:
     def revoke_key(self, key_id: str) -> Any:
         return self._json(self._http.post(self._key_path(key_id, "revoke")))
 
+    def list_partner_keys(self) -> Any:
+        """Names of stored partner keys. The values are not returned."""
+        return self._json(self._http.get(f"{self._api_root}/api/dev/partner-keys"))
+
+    def set_partner_key(self, name: str, value: str) -> Any:
+        """PUT /api/dev/partner-keys. The value is stored and not returned."""
+        cleaned = (name or "").strip().lower()
+        if not cleaned:
+            raise AifluxxError("Enter a name for this partner key.")
+        secret = value or ""
+        if not secret.strip():
+            raise AifluxxError("Enter the partner key.")
+        return self._json(
+            self._http.put(
+                f"{self._api_root}/api/dev/partner-keys",
+                json={"name": cleaned, "value": secret},
+            )
+        )
+
+    def delete_partner_key(self, name: str) -> Any:
+        cleaned = (name or "").strip().lower()
+        if not cleaned or any(mark in cleaned for mark in ("/", "\\", "?", "#")):
+            raise AifluxxError("partner key name is invalid.")
+        return self._json(self._http.delete(f"{self._api_root}/api/dev/partner-keys/{quote(cleaned, safe='')}"))
+
     def _key_path(self, key_id: str, action: str) -> str:
         cleaned = (key_id or "").strip()
         if not cleaned or any(mark in cleaned for mark in ("/", "\\", "?", "#")):
@@ -515,7 +540,7 @@ def _version_uuid_in(node: Any, semver: str, depth: int) -> str | None:
             return found
     # The created version's own id. Check it before wrapped copies so a nested
     # agent summary cannot replace the version UUID on the response itself.
-    if _is_uuid(node.get("id")) and _is_pushed_version(node, semver):
+    if _is_uuid(node.get("id")) and (_is_pushed_version(node, semver) or _is_created_version(node)):
         return str(node["id"]).strip()
     for key in _ENVELOPE_KEYS:
         child = node.get(key)
@@ -555,6 +580,18 @@ def _is_pushed_version(node: dict[str, Any], semver: str) -> bool:
     if node.get("slug") and not has_state:
         return False
     return has_state
+
+
+def _is_created_version(node: dict[str, Any]) -> bool:
+    """True for the live push body ``{id, state, findings, badges}``.
+
+    That response has no semver. An agent summary carries ``slug``, so it is
+    not treated as the version that was just created.
+    """
+    if "slug" in node or "version" in node:
+        return False
+    state = str(node.get("state") or node.get("status") or "").strip().lower()
+    return state in {"draft", "submitted"}
 
 
 def select_version_id(payload: Any, slug: str, *, semver: str | None = None) -> str | None:

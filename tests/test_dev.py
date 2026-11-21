@@ -210,6 +210,8 @@ def test_version_uuid_from_push_reads_response_shapes():
         )
         is None
     )
+    assert version_uuid_from_push({"id": _VERSION, "state": "draft", "findings": [], "badges": []}, "0.1.0") == _VERSION
+    assert version_uuid_from_push({"id": other, "slug": "agent", "state": "draft"}, "0.1.0") is None
 
 
 def test_push_version_id_stays_empty_without_a_version_uuid(tmp_path: Path):

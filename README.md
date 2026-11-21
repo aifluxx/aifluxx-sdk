@@ -482,11 +482,11 @@ After a successful push the CLI writes `.aifluxx/agent.lock` in the package. The
 |---|---|
 | `Dockerfile` | Python 3.11 and the SDK from the `latest` tag. The container sleeps until a command is run. |
 | `compose.yaml` | The dev container. The Action builds it for the job. |
-| `devcontainer/submit.sh` | Logs in with the Home key, then runs `aifluxx validate`, `aifluxx push`, and `aifluxx submit`. |
+| `devcontainer/submit.sh` | Logs in with the Home key on the developer portal, then runs `aifluxx validate` and `aifluxx push`. It does not submit. |
 | `.devcontainer/devcontainer.json` | Opens that same Compose service. |
 | `.github/workflows/submit.yml` | On a push to `main`, runs the script inside the dev container. |
 
-The repository secret is `AIFLUXX_API_KEY`, the key from Home. The script logs in with `--platform dev`, so the API is `https://dev.aifluxx.co.za`. `push` creates a Draft. `submit` sends that draft for review. A platform owner approves it. `dev.aifluxx.co.za` then makes the container available.
+The repository secret is `AIFLUXX_API_KEY`, the key from Home. The script logs in with `--platform developer`, so push goes to `https://dev.developer.aifluxx.co.za`. `--platform dev` is the subscriber API at `https://dev.aifluxx.co.za`, and that host does not accept a developer push. `push` creates a Draft. Run `aifluxx submit` when that draft is ready. A platform owner approves it.
 
 The Action's permission is `contents: read`. The Compose file does not name a registry. The workflow does not log into a registry and does not push an image. The dev container is built for the job and discarded.
 
@@ -519,6 +519,16 @@ Sign up for a developer account at https://developer.aifluxx.co.za/signup. For h
 | `aifluxx keys revoke <id>` | `POST /api/dev/keys/{id}/revoke` |
 
 List responses omit the secret. The text view prints each key's `name` when the API sends one, then the id, prefix, and state. Create and rotate print the new secret once (`key_once`); it is left out of the text view and the JSON payload. `--name` on create sets the name (at most 80 characters). Omit it and the API uses `Sandbox key`. `--save` on create or rotate replaces the key in `~/.aifluxx/credentials`. Revoke asks for confirmation unless you pass `--yes`.
+
+`aifluxx partner-keys` stores a key for an outside service, such as Nulink. That is not the `afx_dev_` key from Home.
+
+| Command | Request |
+|---|---|
+| `aifluxx partner-keys list` | `GET /api/dev/partner-keys` |
+| `aifluxx partner-keys set <name>` | `PUT /api/dev/partner-keys` |
+| `aifluxx partner-keys delete <name>` | `DELETE /api/dev/partner-keys/{name}` |
+
+`set` prompts for the value, or reads it from stdin when there is no terminal. The value is not printed. Log in with `--platform developer` first. On the agent, declare the connection with `auth.secret_ref` set to that name. At run time the platform adds the key to the declared request. The agent does not receive the key as text.
 
 ## Companion
 
