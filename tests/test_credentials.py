@@ -169,5 +169,10 @@ def test_lock_round_trip(tmp_path: Path):
 def test_not_logged_in_points_to_signup(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("AIFLUXX_CREDENTIALS", str(tmp_path / "missing" / "credentials"))
-    with pytest.raises(AuthError, match=r"Not logged in.*developer\.aifluxx\.co\.za/signup \(accounts need approval\)"):
+    with pytest.raises(AuthError) as raised:
         load_credentials()
+    message = str(raised.value)
+    assert message.startswith("Not logged in.")
+    assert "https://dev.developer.aifluxx.co.za/signup" in message
+    assert "https://developer.aifluxx.co.za/signup" in message
+    assert "accounts need approval" in message
