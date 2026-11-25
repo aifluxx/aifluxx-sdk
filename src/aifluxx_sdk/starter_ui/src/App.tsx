@@ -6,6 +6,7 @@ import { Tools } from "./screens/Tools";
 import { Settings } from "./screens/Settings";
 import { LayoutProvider } from "./layout-context";
 import { canonicalize, type Layout, type ScreenName } from "./lib/layout";
+import { normalizeAgents } from "./lib/agents";
 import type { Agent, LocalConfig, RunRecord } from "./types";
 
 interface LayoutResponse {
@@ -37,8 +38,8 @@ export function App() {
 
   const loadAgents = useCallback(async () => {
     try {
-      const data = await request<Agent[] | { agents: Agent[] }>("GET", devPath("/agents"));
-      setAgents(Array.isArray(data) ? data : data.agents ?? []);
+      const data = await request<unknown>("GET", devPath("/agents"));
+      setAgents(normalizeAgents(data));
       setAgentsErr(null);
     } catch (e) {
       if (e instanceof ApiError) setAgentsErr({ status: e.status, method: e.method, url: e.url, body: e.body, hint: e.hint });
